@@ -9,15 +9,26 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 ---- MODEL ----
 
 
+type Piece
+    = King
+    | Queen
+
+
 type alias Model =
     { currentSeed : Random.Pcg.Seed
-    , generated : Int
+    , selectedSquare : Int
+    , selectedPiece : Maybe Piece
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { currentSeed = Random.Pcg.initialSeed 12346, generated = 0 }, Cmd.none )
+    ( { currentSeed = Random.Pcg.initialSeed 12346
+      , selectedSquare = 0
+      , selectedPiece = Nothing
+      }
+    , Cmd.none
+    )
 
 
 
@@ -33,15 +44,32 @@ update msg model =
     case msg of
         Generate ->
             let
-                ( generated, updatedSeed ) =
-                    step (int 1 100) model.currentSeed
+                ( selectedSquare, updatedSeed ) =
+                    step (int 1 64) model.currentSeed
+
+                ( pieceNumber, evenMoarUpdatedSeed ) =
+                    step (int 1 2) updatedSeed
             in
                 ( { model
-                    | currentSeed = updatedSeed
-                    , generated = generated
+                    | currentSeed = evenMoarUpdatedSeed
+                    , selectedSquare = selectedSquare
+                    , selectedPiece = findPieceFromPieceNumber pieceNumber
                   }
                 , Cmd.none
                 )
+
+
+findPieceFromPieceNumber : Int -> Maybe Piece
+findPieceFromPieceNumber pieceNumber =
+    case pieceNumber of
+        1 ->
+            Just King
+
+        2 ->
+            Just Queen
+
+        _ ->
+            Nothing
 
 
 
@@ -53,7 +81,8 @@ view model =
     div []
         [ img [ src "/logo.svg" ] []
         , h1 [] [ text (toString model.currentSeed) ]
-        , h2 [] [ text (toString model.generated) ]
+        , h2 [] [ text (toString model.selectedSquare) ]
+        , h2 [] [ text (toString model.selectedPiece) ]
         , button [ onClick Generate ] [ text "Generate pseudo random" ]
         ]
 
