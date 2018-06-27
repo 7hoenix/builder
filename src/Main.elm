@@ -14,18 +14,22 @@ type Piece
     | Queen
 
 
+type alias PlacedPiece =
+    { square : Int
+    , piece : Piece
+    }
+
+
 type alias Model =
     { currentSeed : Random.Pcg.Seed
-    , selectedSquare : Int
-    , selectedPiece : Maybe Piece
+    , board : List PlacedPiece
     }
 
 
 init : ( Model, Cmd Msg )
 init =
     ( { currentSeed = Random.Pcg.initialSeed 12346
-      , selectedSquare = 0
-      , selectedPiece = Nothing
+      , board = []
       }
     , Cmd.none
     )
@@ -49,27 +53,29 @@ update msg model =
 
                 ( pieceNumber, evenMoarUpdatedSeed ) =
                     step (int 1 2) updatedSeed
+
+                constructed =
+                    { square = selectedSquare, piece = findPieceFromPieceNumber pieceNumber }
             in
                 ( { model
                     | currentSeed = evenMoarUpdatedSeed
-                    , selectedSquare = selectedSquare
-                    , selectedPiece = findPieceFromPieceNumber pieceNumber
+                    , board = model.board ++ [ constructed ]
                   }
                 , Cmd.none
                 )
 
 
-findPieceFromPieceNumber : Int -> Maybe Piece
+findPieceFromPieceNumber : Int -> Piece
 findPieceFromPieceNumber pieceNumber =
     case pieceNumber of
         1 ->
-            Just King
+            King
 
         2 ->
-            Just Queen
+            Queen
 
         _ ->
-            Nothing
+            Debug.crash "not a valid piece number"
 
 
 
@@ -81,10 +87,15 @@ view model =
     div []
         [ img [ src "/logo.svg" ] []
         , h1 [] [ text (toString model.currentSeed) ]
-        , h2 [] [ text (toString model.selectedSquare) ]
-        , h2 [] [ text (toString model.selectedPiece) ]
+        , h2 [] [ (displayConstructed model.board) ]
         , button [ onClick Generate ] [ text "Generate pseudo random" ]
         ]
+
+
+displayConstructed : List PlacedPiece -> Html Msg
+displayConstructed constructedElements =
+    List.foldr (\element result -> result ++ (toString element.square) ++ " " ++ (toString element.piece)) "" constructedElements
+        |> text
 
 
 
