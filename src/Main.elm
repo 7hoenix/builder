@@ -10,8 +10,8 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 
 
 type Piece
-    = King
-    | Queen
+    = Monarch
+    | Hand
 
 
 type alias PlacedPiece =
@@ -69,10 +69,10 @@ findPieceFromPieceNumber : Int -> Piece
 findPieceFromPieceNumber pieceNumber =
     case pieceNumber of
         1 ->
-            King
+            Monarch
 
         2 ->
-            Queen
+            Hand
 
         _ ->
             Debug.crash "not a valid piece number"
