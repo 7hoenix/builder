@@ -7,7 +7,6 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 
 
 ---- MODEL ----
--- add other pieces
 -- add point values
 -- point value maximum achieved for each team
 
@@ -15,6 +14,10 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 type Piece
     = Monarch
     | Hand
+    | Rook
+    | Bishop
+    | Knight
+    | Pawn
 
 
 type Team
@@ -61,7 +64,7 @@ update msg model =
                     step (int 1 64) model.currentSeed
 
                 ( pieceNumber, moarUpdatedSeed ) =
-                    step (int 1 2) updatedSeed
+                    step (int 1 6) updatedSeed
 
                 ( teamNumber, evenMoarUpdatedSeed ) =
                     step (int 1 2) moarUpdatedSeed
@@ -112,6 +115,18 @@ findPieceFromPieceNumber pieceNumber =
 
         2 ->
             Hand
+
+        3 ->
+            Rook
+
+        4 ->
+            Bishop
+
+        5 ->
+            Knight
+
+        6 ->
+            Pawn
 
         _ ->
             Debug.crash "not a valid piece number"
