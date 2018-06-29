@@ -7,7 +7,7 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 
 
 ---- MODEL ----
--- single monarch each side
+-- teams
 -- point value maximum achieved for each team
 
 
@@ -67,24 +67,28 @@ update msg model =
                 )
 
 
-
--- type alias Placement =
---     { square : Int
---     , piece : Piece
---     }
-
-
 conditionalUpdatedBoard : List Placement -> Placement -> List Placement
 conditionalUpdatedBoard placements constructed =
-    if List.any (\placement -> placement.square == constructed.square) placements then
+    if isIlegal placements constructed then
         placements
     else
         placements ++ [ constructed ]
 
 
+isIlegal : List Placement -> Placement -> Bool
+isIlegal placements constructed =
+    squareOpen placements constructed
+        || noMonarchPlaced placements constructed
 
--- no pieces in same square
--- implement this stuff next
+
+squareOpen : List Placement -> Placement -> Bool
+squareOpen placements constructed =
+    List.any (\placement -> placement.square == constructed.square) placements
+
+
+noMonarchPlaced : List Placement -> Placement -> Bool
+noMonarchPlaced placements constructed =
+    List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch) placements
 
 
 findPieceFromPieceNumber : Int -> Piece
