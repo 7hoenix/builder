@@ -9,6 +9,7 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 ---- MODEL ----
 -- Pawns can't be placed in 8th row... ever
 -- Monarch can't be placed in player check
+-- Prefer fair games (switch player if better suited).
 
 
 type Piece
@@ -35,7 +36,7 @@ type alias Placement =
 type alias Model =
     { currentSeed : Random.Pcg.Seed
     , placements : List Placement
-    , points : Int
+    , pointsAllowed : Int
     }
 
 
@@ -43,7 +44,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { currentSeed = Random.Pcg.initialSeed 12345
       , placements = []
-      , points = 1
+      , pointsAllowed = 1
       }
     , Cmd.none
     )
@@ -79,25 +80,25 @@ update msg model =
             in
                 ( { model
                     | currentSeed = evenMoarUpdatedSeed
-                    , placements = conditionalUpdatedBoard model.points model.placements constructed
+                    , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
                   }
                 , Cmd.none
                 )
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
-conditionalUpdatedBoard points placements constructed =
-    if isIlegal points placements constructed then
+conditionalUpdatedBoard pointsAllowed placements constructed =
+    if isIlegal pointsAllowed placements constructed then
         placements
     else
         placements ++ [ constructed ]
 
 
 isIlegal : Int -> List Placement -> Placement -> Bool
-isIlegal points placements constructed =
+isIlegal pointsAllowed placements constructed =
     squareNotOpen placements constructed
         || monarchAlreadyPlaced placements constructed
-        || notEnoughPointsRemaining points placements constructed
+        || notEnoughPointsRemaining pointsAllowed placements constructed
 
 
 squareNotOpen : List Placement -> Placement -> Bool
@@ -111,12 +112,12 @@ monarchAlreadyPlaced placements constructed =
 
 
 notEnoughPointsRemaining : Int -> List Placement -> Placement -> Bool
-notEnoughPointsRemaining points placements constructed =
+notEnoughPointsRemaining pointsAllowed placements constructed =
     let
         currentTotal =
             List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
     in
-        points < currentTotal + findPointValueFromPiece constructed.piece
+        pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece
 
 
 findPieceFromPieceNumber : Int -> Piece
