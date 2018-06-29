@@ -7,7 +7,8 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 
 
 ---- MODEL ----
--- teams
+-- add other pieces
+-- add point values
 -- point value maximum achieved for each team
 
 
@@ -16,9 +17,15 @@ type Piece
     | Hand
 
 
+type Team
+    = Player
+    | Opponent
+
+
 type alias Placement =
     { square : Int
     , piece : Piece
+    , team : Team
     }
 
 
@@ -53,11 +60,17 @@ update msg model =
                 ( selectedSquare, updatedSeed ) =
                     step (int 1 64) model.currentSeed
 
-                ( pieceNumber, evenMoarUpdatedSeed ) =
+                ( pieceNumber, moarUpdatedSeed ) =
                     step (int 1 2) updatedSeed
 
+                ( teamNumber, evenMoarUpdatedSeed ) =
+                    step (int 1 2) moarUpdatedSeed
+
                 constructed =
-                    { square = selectedSquare, piece = findPieceFromPieceNumber pieceNumber }
+                    { square = selectedSquare
+                    , piece = findPieceFromPieceNumber pieceNumber
+                    , team = findTeamFromTeamNumber teamNumber
+                    }
             in
                 ( { model
                     | currentSeed = evenMoarUpdatedSeed
@@ -88,7 +101,7 @@ squareOpen placements constructed =
 
 noMonarchPlaced : List Placement -> Placement -> Bool
 noMonarchPlaced placements constructed =
-    List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch) placements
+    List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch && placement.team == constructed.team) placements
 
 
 findPieceFromPieceNumber : Int -> Piece
@@ -99,6 +112,19 @@ findPieceFromPieceNumber pieceNumber =
 
         2 ->
             Hand
+
+        _ ->
+            Debug.crash "not a valid piece number"
+
+
+findTeamFromTeamNumber : Int -> Team
+findTeamFromTeamNumber teamNumber =
+    case teamNumber of
+        1 ->
+            Player
+
+        2 ->
+            Opponent
 
         _ ->
             Debug.crash "not a valid piece number"
@@ -120,7 +146,7 @@ view model =
 
 displayConstructed : List Placement -> Html Msg
 displayConstructed constructedElements =
-    List.foldr (\element result -> result ++ " " ++ (toString element.square) ++ " \x0D\n " ++ (toString element.piece)) "" constructedElements
+    List.foldr (\element result -> result ++ " " ++ (toString element.square) ++ " \x0D\n " ++ (toString element.piece) ++ " " ++ (toString element.team)) "" constructedElements
         |> text
 
 
