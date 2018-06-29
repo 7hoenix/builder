@@ -7,8 +7,8 @@ import Random.Pcg exposing (initialSeed, generate, int, step)
 
 
 ---- MODEL ----
--- add point values
--- point value maximum achieved for each team
+-- Pawns can't be placed in 8th row... ever
+-- Monarch can't be placed in player check
 
 
 type Piece
@@ -35,6 +35,7 @@ type alias Placement =
 type alias Model =
     { currentSeed : Random.Pcg.Seed
     , placements : List Placement
+    , points : Int
     }
 
 
@@ -42,6 +43,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { currentSeed = Random.Pcg.initialSeed 12345
       , placements = []
+      , points = 1
       }
     , Cmd.none
     )
@@ -77,34 +79,44 @@ update msg model =
             in
                 ( { model
                     | currentSeed = evenMoarUpdatedSeed
-                    , placements = conditionalUpdatedBoard model.placements constructed
+                    , placements = conditionalUpdatedBoard model.points model.placements constructed
                   }
                 , Cmd.none
                 )
 
 
-conditionalUpdatedBoard : List Placement -> Placement -> List Placement
-conditionalUpdatedBoard placements constructed =
-    if isIlegal placements constructed then
+conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
+conditionalUpdatedBoard points placements constructed =
+    if isIlegal points placements constructed then
         placements
     else
         placements ++ [ constructed ]
 
 
-isIlegal : List Placement -> Placement -> Bool
-isIlegal placements constructed =
-    squareOpen placements constructed
-        || noMonarchPlaced placements constructed
+isIlegal : Int -> List Placement -> Placement -> Bool
+isIlegal points placements constructed =
+    squareNotOpen placements constructed
+        || monarchAlreadyPlaced placements constructed
+        || notEnoughPointsRemaining points placements constructed
 
 
-squareOpen : List Placement -> Placement -> Bool
-squareOpen placements constructed =
+squareNotOpen : List Placement -> Placement -> Bool
+squareNotOpen placements constructed =
     List.any (\placement -> placement.square == constructed.square) placements
 
 
-noMonarchPlaced : List Placement -> Placement -> Bool
-noMonarchPlaced placements constructed =
+monarchAlreadyPlaced : List Placement -> Placement -> Bool
+monarchAlreadyPlaced placements constructed =
     List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch && placement.team == constructed.team) placements
+
+
+notEnoughPointsRemaining : Int -> List Placement -> Placement -> Bool
+notEnoughPointsRemaining points placements constructed =
+    let
+        currentTotal =
+            List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
+    in
+        points < currentTotal + findPointValueFromPiece constructed.piece
 
 
 findPieceFromPieceNumber : Int -> Piece
@@ -130,6 +142,28 @@ findPieceFromPieceNumber pieceNumber =
 
         _ ->
             Debug.crash "not a valid piece number"
+
+
+findPointValueFromPiece : Piece -> Int
+findPointValueFromPiece piece =
+    case piece of
+        Monarch ->
+            0
+
+        Hand ->
+            9
+
+        Rook ->
+            5
+
+        Bishop ->
+            3
+
+        Knight ->
+            3
+
+        Pawn ->
+            1
 
 
 findTeamFromTeamNumber : Int -> Team
