@@ -7,6 +7,7 @@ import Random.Pcg as Random
 
 
 ---- MODEL ----
+-- monarchs not next to eachother
 -- Pawns can't be placed in 8th row... ever
 -- Monarch can't be placed in player check
 -- Prefer fair games (switch player if better suited).
@@ -88,36 +89,105 @@ update msg model =
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
 conditionalUpdatedBoard pointsAllowed placements constructed =
-    if isIlegal pointsAllowed placements constructed then
-        placements
-    else
+    if validate pointsAllowed placements constructed then
         placements ++ [ constructed ]
+    else
+        placements
 
 
-isIlegal : Int -> List Placement -> Placement -> Bool
-isIlegal pointsAllowed placements constructed =
-    squareNotOpen placements constructed
-        || monarchAlreadyPlaced placements constructed
-        || notEnoughPointsRemaining pointsAllowed placements constructed
+
+-- VALIDATION
 
 
-squareNotOpen : List Placement -> Placement -> Bool
-squareNotOpen placements constructed =
-    List.any (\placement -> placement.square == constructed.square) placements
+type alias State =
+    { pointsAllowed : Int
+    , placements : List Placement
+    , constructed : Placement
+    }
 
 
-monarchAlreadyPlaced : List Placement -> Placement -> Bool
-monarchAlreadyPlaced placements constructed =
-    List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch && placement.team == constructed.team) placements
+type Validation
+    = Valid
+    | Invalid
 
 
-notEnoughPointsRemaining : Int -> List Placement -> Placement -> Bool
-notEnoughPointsRemaining pointsAllowed placements constructed =
+validate : Int -> List Placement -> Placement -> Bool
+validate pointsAllowed placements constructed =
+    let
+        state =
+            State pointsAllowed placements constructed
+    in
+    List.all (\validate -> validate state == Valid)
+        [ squareNotOpen
+        , monarchAlreadyPlaced
+        , monarchsNotAdjacent
+        , notEnoughPointsRemaining
+        ]
+
+
+squareNotOpen : State -> Validation
+squareNotOpen { placements, constructed } =
+    if List.any (\placement -> placement.square == constructed.square) placements then
+        Invalid
+    else
+        Valid
+
+
+monarchAlreadyPlaced : State -> Validation
+monarchAlreadyPlaced { placements, constructed } =
+    if List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch && placement.team == constructed.team) placements then
+        Invalid
+    else
+        Valid
+
+
+monarchsNotAdjacent : State -> Validation
+monarchsNotAdjacent { placements, constructed } =
+    let
+        findMonarch team =
+            List.filter
+                (\p -> p.team == team && p.piece == Monarch)
+                (constructed :: placements)
+    in
+    {- (1,2)
+       (1,2) . (1,3) . (1,4)
+       (2,2) . (2,3) . (2,4) . (2,5)
+       (3,2) . (3,3) . (3,4)
+    -}
+    case ( findMonarch Player, findMonarch Opponent ) of
+        ( [ player ], [ opponent ] ) ->
+            if
+                (abs (x player - x opponent) <= 1)
+                    && (abs (y player - y opponent) <= 1)
+            then
+                Invalid
+            else
+                Valid
+
+        _ ->
+            Valid
+
+
+x : Placement -> Int
+x { square } =
+    square % 8
+
+
+y : Placement -> Int
+y { square } =
+    square // 8
+
+
+notEnoughPointsRemaining : State -> Validation
+notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
     let
         currentTotal =
             List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
     in
-    pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece
+    if pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece then
+        Invalid
+    else
+        Valid
 
 
 findPointValueFromPiece : Piece -> Int
