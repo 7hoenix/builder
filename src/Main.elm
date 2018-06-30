@@ -7,7 +7,6 @@ import Random.Pcg as Random
 
 
 ---- MODEL ----
--- monarchs not next to eachother
 -- Pawns can't be placed in 8th row... ever
 -- Monarch can't be placed in player check
 -- Prefer fair games (switch player if better suited).
@@ -45,7 +44,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { currentSeed = Random.initialSeed 12345
       , placements = []
-      , pointsAllowed = 1
+      , pointsAllowed = 5
       }
     , Cmd.none
     )
@@ -57,34 +56,59 @@ init =
 
 type Msg
     = Generate
+    | GeneratePlacement
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Generate ->
-            let
-                ( selectedSquare, updatedSeed ) =
-                    Random.step (Random.int 1 64) model.currentSeed
+            ( generate model, Cmd.none )
 
-                ( piece, moarUpdatedSeed ) =
-                    Random.step pieceGenerator updatedSeed
+        GeneratePlacement ->
+            ( generatePlacement model, Cmd.none )
 
-                ( team, evenMoarUpdatedSeed ) =
-                    Random.step teamGenerator moarUpdatedSeed
 
-                constructed =
-                    { square = selectedSquare
-                    , piece = piece
-                    , team = team
-                    }
-            in
-            ( { model
-                | currentSeed = evenMoarUpdatedSeed
-                , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
-              }
-            , Cmd.none
-            )
+generate : Model -> Model
+generate model =
+    let
+        isMonarch { piece } =
+            piece == Monarch
+
+        hasBothMonarchs =
+            2 == List.length (List.filter isMonarch model.placements)
+
+        atMaxScore =
+            currentTotal model.placements == model.pointsAllowed
+    in
+    if hasBothMonarchs && atMaxScore then
+        model
+    else
+        generate <| generatePlacement model
+
+
+generatePlacement : Model -> Model
+generatePlacement model =
+    let
+        ( selectedSquare, updatedSeed ) =
+            Random.step (Random.int 1 64) model.currentSeed
+
+        ( piece, moarUpdatedSeed ) =
+            Random.step pieceGenerator updatedSeed
+
+        ( team, evenMoarUpdatedSeed ) =
+            Random.step teamGenerator moarUpdatedSeed
+
+        constructed =
+            { square = selectedSquare
+            , piece = piece
+            , team = team
+            }
+    in
+    { model
+        | currentSeed = evenMoarUpdatedSeed
+        , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
+    }
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
@@ -180,14 +204,15 @@ y { square } =
 
 notEnoughPointsRemaining : State -> Validation
 notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
-    let
-        currentTotal =
-            List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
-    in
-    if pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece then
+    if pointsAllowed < currentTotal placements + findPointValueFromPiece constructed.piece then
         Invalid
     else
         Valid
+
+
+currentTotal : List Placement -> Int
+currentTotal placements =
+    List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
 
 
 findPointValueFromPiece : Piece -> Int
