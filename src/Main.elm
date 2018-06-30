@@ -1,9 +1,9 @@
 module Main exposing (..)
 
-import Html exposing (Html, text, div, h1, h2, img, button, br)
+import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
-import Random.Pcg exposing (initialSeed, generate, int, step)
+import Random.Pcg as Random
 
 
 ---- MODEL ----
@@ -34,7 +34,7 @@ type alias Placement =
 
 
 type alias Model =
-    { currentSeed : Random.Pcg.Seed
+    { currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     }
@@ -42,7 +42,7 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    ( { currentSeed = Random.Pcg.initialSeed 12345
+    ( { currentSeed = Random.initialSeed 12345
       , placements = []
       , pointsAllowed = 1
       }
@@ -64,26 +64,26 @@ update msg model =
         Generate ->
             let
                 ( selectedSquare, updatedSeed ) =
-                    step (int 1 64) model.currentSeed
+                    Random.step (Random.int 1 64) model.currentSeed
 
-                ( pieceNumber, moarUpdatedSeed ) =
-                    step (int 1 6) updatedSeed
+                ( piece, moarUpdatedSeed ) =
+                    Random.step pieceGenerator updatedSeed
 
-                ( teamNumber, evenMoarUpdatedSeed ) =
-                    step (int 1 2) moarUpdatedSeed
+                ( team, evenMoarUpdatedSeed ) =
+                    Random.step teamGenerator moarUpdatedSeed
 
                 constructed =
                     { square = selectedSquare
-                    , piece = findPieceFromPieceNumber pieceNumber
-                    , team = findTeamFromTeamNumber teamNumber
+                    , piece = piece
+                    , team = team
                     }
             in
-                ( { model
-                    | currentSeed = evenMoarUpdatedSeed
-                    , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
-                  }
-                , Cmd.none
-                )
+            ( { model
+                | currentSeed = evenMoarUpdatedSeed
+                , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
+              }
+            , Cmd.none
+            )
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
@@ -117,32 +117,7 @@ notEnoughPointsRemaining pointsAllowed placements constructed =
         currentTotal =
             List.foldr (\placement total -> total + findPointValueFromPiece placement.piece) 0 placements
     in
-        pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece
-
-
-findPieceFromPieceNumber : Int -> Piece
-findPieceFromPieceNumber pieceNumber =
-    case pieceNumber of
-        1 ->
-            Monarch
-
-        2 ->
-            Hand
-
-        3 ->
-            Rook
-
-        4 ->
-            Bishop
-
-        5 ->
-            Knight
-
-        6 ->
-            Pawn
-
-        _ ->
-            Debug.crash "not a valid piece number"
+    pointsAllowed < currentTotal + findPointValueFromPiece constructed.piece
 
 
 findPointValueFromPiece : Piece -> Int
@@ -167,17 +142,22 @@ findPointValueFromPiece piece =
             1
 
 
-findTeamFromTeamNumber : Int -> Team
-findTeamFromTeamNumber teamNumber =
-    case teamNumber of
-        1 ->
-            Player
+pieceGenerator : Random.Generator Piece
+pieceGenerator =
+    Random.choices <|
+        List.map Random.constant
+            [ Monarch
+            , Hand
+            , Rook
+            , Bishop
+            , Knight
+            , Pawn
+            ]
 
-        2 ->
-            Opponent
 
-        _ ->
-            Debug.crash "not a valid piece number"
+teamGenerator : Random.Generator Team
+teamGenerator =
+    Random.choice Player Opponent
 
 
 
@@ -189,14 +169,14 @@ view model =
     div []
         [ img [ src "/logo.svg" ] []
         , h1 [] [ text (toString model.currentSeed) ]
-        , h2 [] [ (displayConstructed model.placements) ]
+        , h2 [] [ displayConstructed model.placements ]
         , button [ onClick Generate ] [ text "Generate pseudo random" ]
         ]
 
 
 displayConstructed : List Placement -> Html Msg
 displayConstructed constructedElements =
-    List.foldr (\element result -> result ++ " " ++ (toString element.square) ++ " \x0D\n " ++ (toString element.piece) ++ " " ++ (toString element.team)) "" constructedElements
+    List.foldr (\element result -> result ++ " " ++ toString element.square ++ " \x0D\n " ++ toString element.piece ++ " " ++ toString element.team) "" constructedElements
         |> text
 
 
