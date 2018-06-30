@@ -72,11 +72,8 @@ update msg model =
 generate : Model -> Model
 generate model =
     let
-        isMonarch { piece } =
-            piece == Monarch
-
         hasBothMonarchs =
-            2 == List.length (List.filter isMonarch model.placements)
+            2 == List.length (List.filter (is Monarch) model.placements)
 
         atMaxScore =
             currentTotal model.placements == model.pointsAllowed
@@ -113,7 +110,7 @@ generatePlacement model =
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
 conditionalUpdatedBoard pointsAllowed placements constructed =
-    if validate pointsAllowed placements constructed then
+    if isLegal pointsAllowed placements constructed then
         placements ++ [ constructed ]
     else
         placements
@@ -135,8 +132,8 @@ type Validation
     | Invalid
 
 
-validate : Int -> List Placement -> Placement -> Bool
-validate pointsAllowed placements constructed =
+isLegal : Int -> List Placement -> Placement -> Bool
+isLegal pointsAllowed placements constructed =
     let
         state =
             State pointsAllowed placements constructed
@@ -145,6 +142,7 @@ validate pointsAllowed placements constructed =
         [ squareNotOpen
         , monarchAlreadyPlaced
         , monarchsNotAdjacent
+        , notTooManyPawns
         , notEnoughPointsRemaining
         ]
 
@@ -192,6 +190,27 @@ monarchsNotAdjacent { placements, constructed } =
             Valid
 
 
+notTooManyPawns : State -> Validation
+notTooManyPawns { placements, constructed } =
+    let
+        forConstructed =
+            List.filter (is Pawn) (constructed :: placements)
+                |> List.filter ((==) constructed.team << .team)
+    in
+    if List.length forConstructed > 8 then
+        Invalid
+    else
+        Valid
+
+
+notEnoughPointsRemaining : State -> Validation
+notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
+    if pointsAllowed < currentTotal placements + findPointValueFromPiece constructed.piece then
+        Invalid
+    else
+        Valid
+
+
 x : Placement -> Int
 x { square } =
     square % 8
@@ -202,12 +221,9 @@ y { square } =
     square // 8
 
 
-notEnoughPointsRemaining : State -> Validation
-notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
-    if pointsAllowed < currentTotal placements + findPointValueFromPiece constructed.piece then
-        Invalid
-    else
-        Valid
+is : Piece -> Placement -> Bool
+is piece placement =
+    placement.piece == piece
 
 
 currentTotal : List Placement -> Int
