@@ -8,7 +8,6 @@ import Random.Pcg as Random
 
 
 ---- MODEL ----
--- Pawns can't be placed in 8th row... ever
 -- Monarch can't be placed in player check
 -- Prefer fair games (switch player if better suited).
 
@@ -148,6 +147,7 @@ isLegal pointsAllowed placements constructed =
         , monarchAlreadyPlaced
         , monarchsNotAdjacent
         , notTooManyPawns
+        , pawnsNotInEndRows
         , notEnoughPointsRemaining
         ]
 
@@ -203,6 +203,17 @@ notTooManyPawns { placements, constructed } =
                 |> List.filter ((==) constructed.team << .team)
     in
     if List.length forConstructed > 8 then
+        Invalid
+    else
+        Valid
+
+
+pawnsNotInEndRows : State -> Validation
+pawnsNotInEndRows { constructed } =
+    if
+        (constructed.piece == Pawn)
+            && (constructed.square.y == 1 || constructed.square.y == 8)
+    then
         Invalid
     else
         Valid
