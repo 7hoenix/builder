@@ -9,7 +9,6 @@ import Random.Pcg as Random
 
 ---- MODEL ----
 -- Monarch can't be placed in player check
--- Prefer fair games (switch player if better suited).
 
 
 type Piece
@@ -125,8 +124,7 @@ conditionalUpdatedBoard pointsAllowed placements constructed =
 
 
 type alias State =
-    { pointsAllowed : Int
-    , placements : List Placement
+    { placements : List Placement
     , constructed : Placement
     }
 
@@ -140,7 +138,7 @@ isLegal : Int -> List Placement -> Placement -> Bool
 isLegal pointsAllowed placements constructed =
     let
         state =
-            State pointsAllowed placements constructed
+            State placements constructed
     in
     List.all (\validate -> validate state == Valid)
         [ squareNotOpen
@@ -148,7 +146,8 @@ isLegal pointsAllowed placements constructed =
         , monarchsNotAdjacent
         , notTooManyPawns
         , pawnsNotInEndRows
-        , notEnoughPointsRemaining
+        , doesntLeadToBalancedGame
+        , notEnoughPointsRemaining pointsAllowed
         ]
 
 
@@ -219,8 +218,23 @@ pawnsNotInEndRows { constructed } =
         Valid
 
 
-notEnoughPointsRemaining : State -> Validation
-notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
+doesntLeadToBalancedGame : State -> Validation
+doesntLeadToBalancedGame { placements, constructed } =
+    let
+        ( constructedPlacements, otherPlacements ) =
+            List.partition ((==) constructed.team << .team) placements
+    in
+    if
+        (findPointValueFromPiece constructed.piece > 0)
+            && (currentTotal constructedPlacements > currentTotal otherPlacements)
+    then
+        Invalid
+    else
+        Valid
+
+
+notEnoughPointsRemaining : Int -> State -> Validation
+notEnoughPointsRemaining pointsAllowed { placements, constructed } =
     if pointsAllowed < currentTotal placements + findPointValueFromPiece constructed.piece then
         Invalid
     else
