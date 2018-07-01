@@ -3,6 +3,7 @@ module Main exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
+import Js
 import Random.Pcg as Random
 
 
@@ -26,8 +27,12 @@ type Team
     | Opponent
 
 
+type alias Square =
+    { x : Int, y : Int }
+
+
 type alias Placement =
-    { square : Int
+    { square : Square
     , piece : Piece
     , team : Team
     }
@@ -44,7 +49,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { currentSeed = Random.initialSeed 12345
       , placements = []
-      , pointsAllowed = 5
+      , pointsAllowed = 6
       }
     , Cmd.none
     )
@@ -88,7 +93,7 @@ generatePlacement : Model -> Model
 generatePlacement model =
     let
         ( selectedSquare, updatedSeed ) =
-            Random.step (Random.int 1 64) model.currentSeed
+            Random.step squareGenerator model.currentSeed
 
         ( piece, moarUpdatedSeed ) =
             Random.step pieceGenerator updatedSeed
@@ -179,8 +184,8 @@ monarchsNotAdjacent { placements, constructed } =
     case ( findMonarch Player, findMonarch Opponent ) of
         ( [ player ], [ opponent ] ) ->
             if
-                (abs (x player - x opponent) <= 1)
-                    && (abs (y player - y opponent) <= 1)
+                (abs (player.square.x - opponent.square.x) <= 1)
+                    && (abs (player.square.y - opponent.square.y) <= 1)
             then
                 Invalid
             else
@@ -209,16 +214,6 @@ notEnoughPointsRemaining { pointsAllowed, placements, constructed } =
         Invalid
     else
         Valid
-
-
-x : Placement -> Int
-x { square } =
-    square % 8
-
-
-y : Placement -> Int
-y { square } =
-    square // 8
 
 
 is : Piece -> Placement -> Bool
@@ -251,6 +246,11 @@ findPointValueFromPiece piece =
 
         Pawn ->
             1
+
+
+squareGenerator : Random.Generator Square
+squareGenerator =
+    Random.map2 Square (Random.int 1 8) (Random.int 1 8)
 
 
 pieceGenerator : Random.Generator Piece
