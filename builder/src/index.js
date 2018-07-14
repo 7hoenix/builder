@@ -16,9 +16,10 @@ app.ports.fromElm.subscribe(msg => {
           placement.square
         )
       );
-      console.log(valid);
-      console.log(chess.fen());
-      // app.ports.toElm.send({ tag: "VALID_MOVES", valid: valid });
+      app.ports.fromJs.send({
+        tag: "VALIDATED_POSITION",
+        position: chess.fen()
+      });
       return;
     default:
       console.log("msg not tagged", msg);

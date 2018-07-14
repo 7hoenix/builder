@@ -1,4 +1,4 @@
-port module Js exposing (fromElm)
+port module Js exposing (fromElm, fromJs)
 
 import Json.Encode as E
 

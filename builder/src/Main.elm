@@ -4,6 +4,7 @@ import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
 import Js
+import Json.Decode as D
 import Json.Encode as E
 import Random.Pcg as Random
 
@@ -38,7 +39,8 @@ type alias Placement =
 
 
 type alias Model =
-    { currentSeed : Random.Seed
+    { currentGame : Maybe String
+    , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     }
@@ -46,7 +48,8 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    ( { currentSeed = Random.initialSeed 12345
+    ( { currentGame = Nothing
+      , currentSeed = Random.initialSeed 12345
       , placements = []
       , pointsAllowed = 6
       }
@@ -62,6 +65,7 @@ type Msg
     = Generate
     | GeneratePlacement
     | Validate
+    | HandleGameUpdate String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -75,6 +79,9 @@ update msg model =
 
         Validate ->
             ( model, sendPlacements model.placements )
+
+        HandleGameUpdate fen ->
+            ( { model | currentGame = Just fen }, Cmd.none )
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -404,6 +411,7 @@ view model =
         , h2 [] [ displayConstructed model.placements ]
         , button [ onClick Generate ] [ text "Generate content" ]
         , button [ onClick Validate ] [ text "Validate position" ]
+        , h1 [] [ displayGame model.currentGame ]
         ]
 
 
@@ -411,6 +419,39 @@ displayConstructed : List Placement -> Html Msg
 displayConstructed constructedElements =
     List.foldr (\element result -> result ++ " " ++ toString element.square ++ " \x0D\n " ++ toString element.piece ++ " " ++ toString element.team) "" constructedElements
         |> text
+
+
+displayGame : Maybe String -> Html Msg
+displayGame maybeFen =
+    case maybeFen of
+        Nothing ->
+            text "No game here"
+
+        Just fen ->
+            text fen
+
+
+
+---- SUBSCRIPTIONS ----
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Js.fromJs decodeFen
+
+
+decodeFen : E.Value -> Msg
+decodeFen value =
+    let
+        result =
+            D.decodeValue (D.field "position" D.string) value
+    in
+    case result of
+        Ok fen ->
+            HandleGameUpdate fen
+
+        Err error ->
+            Debug.crash ("fen decoding failed: " ++ error)
 
 
 
@@ -423,5 +464,5 @@ main =
         { view = view
         , init = init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         }
