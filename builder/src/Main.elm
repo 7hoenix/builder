@@ -3,7 +3,6 @@ module Main exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
-import Js
 import Random.Pcg as Random
 
 
@@ -175,10 +174,10 @@ monarchsNotAdjacent { placements, constructed } =
                 (\p -> p.team == team && p.piece == Monarch)
                 (constructed :: placements)
     in
-    {- (1,2)
-       (1,2) . (1,3) . (1,4)
-       (2,2) . (2,3) . (2,4) . (2,5)
-       (3,2) . (3,3) . (3,4)
+    {- (-2,-1)
+       (-1,-1) . (-1,0) . (-1,1)
+       ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
+       ( 1,-1) . ( 1,0) . ( 1,1)
     -}
     case ( findMonarch Player, findMonarch Opponent ) of
         ( [ player ], [ opponent ] ) ->
@@ -306,7 +305,7 @@ view model =
         [ img [ src "/logo.svg" ] []
         , h1 [] [ text (toString model.currentSeed) ]
         , h2 [] [ displayConstructed model.placements ]
-        , button [ onClick Generate ] [ text "Generate pseudo random" ]
+        , button [ onClick Generate ] [ text "Generate content" ]
         ]
 
 
