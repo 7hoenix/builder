@@ -3,6 +3,7 @@ module Main exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
+import Js
 import Random.Pcg as Random
 
 
