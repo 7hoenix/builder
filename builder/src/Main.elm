@@ -4,6 +4,7 @@ import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
 import Js
+import Json.Encode as E
 import Random.Pcg as Random
 
 
@@ -60,6 +61,7 @@ init =
 type Msg
     = Generate
     | GeneratePlacement
+    | Validate
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -70,6 +72,100 @@ update msg model =
 
         GeneratePlacement ->
             ( generatePlacement model, Cmd.none )
+
+        Validate ->
+            ( model, sendPlacements model.placements )
+
+
+sendPlacements : List Placement -> Cmd msg
+sendPlacements placements =
+    Js.fromElm
+        (E.object
+            [ ( "tag", E.string "SEND_PLACEMENTS" )
+            , ( "placements", pplacements placements )
+            ]
+        )
+
+
+pplacements : List Placement -> E.Value
+pplacements placements =
+    E.list (List.map (\p -> placement p) placements)
+
+
+placement : Placement -> E.Value
+placement placement =
+    E.object
+        [ ( "square", square placement.square )
+        , ( "piece", piece placement.piece )
+        , ( "team", team placement.team )
+        ]
+
+
+square : Square -> E.Value
+square square =
+    let
+        row =
+            case square.x of
+                1 ->
+                    "a"
+
+                2 ->
+                    "b"
+
+                3 ->
+                    "c"
+
+                4 ->
+                    "d"
+
+                5 ->
+                    "e"
+
+                6 ->
+                    "f"
+
+                7 ->
+                    "g"
+
+                8 ->
+                    "h"
+
+                _ ->
+                    Debug.crash "not valid x parameter :("
+    in
+    E.string (row ++ toString square.y)
+
+
+piece : Piece -> E.Value
+piece piece =
+    case piece of
+        Monarch ->
+            E.string "k"
+
+        Hand ->
+            E.string "q"
+
+        Rook ->
+            E.string "r"
+
+        Bishop ->
+            E.string "b"
+
+        Knight ->
+            E.string "n"
+
+        Pawn ->
+            E.string "p"
+
+
+team : Team -> E.Value
+team team =
+    case team of
+        Player ->
+            E.string "b"
+
+        Opponent ->
+            E.string "w"
 
 
 generate : Model -> Model
@@ -307,6 +403,7 @@ view model =
         , h1 [] [ text (toString model.currentSeed) ]
         , h2 [] [ displayConstructed model.placements ]
         , button [ onClick Generate ] [ text "Generate content" ]
+        , button [ onClick Validate ] [ text "Validate position" ]
         ]
 
 
