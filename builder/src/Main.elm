@@ -1,12 +1,20 @@
 module Main exposing (..)
 
-import Html exposing (..)
+import Arithmetic exposing (isEven)
+import Html exposing (Html, button, div, h1, h2, img)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
 import Js
 import Json.Decode as D
+import Json.Decode.Pipeline as JDP
 import Json.Encode as E
+import List.Extra as List
+import Mouse
+import Piece
 import Random.Pcg as Random
+import Svg exposing (Svg, g, rect, svg, text, text_)
+import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
+import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
 
 
 ---- MODEL ----
@@ -27,12 +35,12 @@ type Team
     | Opponent
 
 
-type alias Square =
+type alias SquareLocation =
     { x : Int, y : Int }
 
 
 type alias Placement =
-    { square : Square
+    { square : SquareLocation
     , piece : Piece
     , team : Team
     }
@@ -43,6 +51,7 @@ type alias Model =
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
+    , chessModel : ChessModel
     }
 
 
@@ -52,6 +61,7 @@ init =
       , currentSeed = Random.initialSeed 12345
       , placements = []
       , pointsAllowed = 6
+      , chessModel = chessInit
       }
     , Cmd.none
     )
@@ -66,6 +76,7 @@ type Msg
     | GeneratePlacement
     | Validate
     | HandleGameUpdate String
+    | ChessMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -82,6 +93,9 @@ update msg model =
 
         HandleGameUpdate fen ->
             ( { model | currentGame = Just fen }, Cmd.none )
+
+        ChessMsg ->
+            ( model, Cmd.none )
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -108,7 +122,7 @@ placement placement =
         ]
 
 
-square : Square -> E.Value
+square : SquareLocation -> E.Value
 square square =
     let
         row =
@@ -376,9 +390,9 @@ findPointValueFromPiece piece =
             1
 
 
-squareGenerator : Random.Generator Square
+squareGenerator : Random.Generator SquareLocation
 squareGenerator =
-    Random.map2 Square (Random.int 1 8) (Random.int 1 8)
+    Random.map2 SquareLocation (Random.int 1 8) (Random.int 1 8)
 
 
 pieceGenerator : Random.Generator Piece
@@ -466,3 +480,335 @@ main =
         , update = update
         , subscriptions = subscriptions
         }
+
+
+
+---- CHESS ----
+---- CHESSMODEL ----
+
+
+type alias ChessModel =
+    { board : Board
+    , drag : Maybe Drag
+    , mousePosition : Mouse.Position
+    }
+
+
+type Drag
+    = Drag Player Piece
+
+
+type Player
+    = White
+    | Black
+
+
+
+-- type Piece
+--     = Pawn
+--     | Knight
+--     | Bishop
+--     | Rook
+--     | Queen
+--     | King
+
+
+type Square
+    = Empty
+    | Occupied Player Piece
+
+
+type Location
+    = Location Int Int
+
+
+type alias Board =
+    List Rank
+
+
+type alias Rank =
+    List Square
+
+
+type alias MouseMove =
+    { offsetX : Int
+    , offsetY : Int
+    }
+
+
+chessInit : ChessModel
+chessInit =
+    { board = newGame
+    , drag = Nothing
+    , mousePosition = { x = 0, y = 0 }
+    }
+
+
+newGame : Board
+newGame =
+    List.transpose <|
+        List.reverse <|
+            [ [ Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Hand, Occupied Black Monarch, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook ]
+            , [ Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn ]
+            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
+            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
+            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
+            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
+            , [ Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn ]
+            , [ Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Hand, Occupied White Monarch, Occupied White Bishop, Occupied White Knight, Occupied White Rook ]
+            ]
+
+
+
+---- CHESSUPDATE ----
+
+
+type ChessMsg
+    = NoOp
+    | DragStart Player Piece Location
+    | DragEnd Location
+    | MouseMoved MouseMove
+
+
+chessUpdate : ChessMsg -> ChessModel -> ( ChessModel, Cmd ChessMsg )
+chessUpdate msg model =
+    case Debug.log "Main.update" msg of
+        NoOp ->
+            ( model, Cmd.none )
+
+        DragStart player piece location ->
+            let
+                updatedBoard =
+                    emptySquare location model.board
+            in
+            ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
+
+        DragEnd location ->
+            let
+                updatedBoard =
+                    placePiece location model.drag model.board
+            in
+            ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
+
+        MouseMoved { offsetX, offsetY } ->
+            ( { model | mousePosition = { x = offsetX, y = offsetY } }, Cmd.none )
+
+
+emptySquare : Location -> Board -> Board
+emptySquare (Location rankIndex fileIndex) board =
+    List.updateAt rankIndex (\rank -> emptySquareInRank rank fileIndex) board
+
+
+emptySquareInRank : Rank -> Int -> Rank
+emptySquareInRank rank fileIndex =
+    List.updateAt fileIndex (\_ -> Empty) rank
+
+
+placePiece : Location -> Maybe Drag -> Board -> Board
+placePiece (Location rankIndex fileIndex) drag board =
+    case drag of
+        Nothing ->
+            board
+
+        Just (Drag player piece) ->
+            List.updateAt rankIndex (\rank -> List.updateAt fileIndex (\_ -> Occupied player piece) rank) board
+
+
+
+---- CHESSVIEW ----
+
+
+chessView : ChessModel -> Html ChessMsg
+chessView model =
+    svg
+        [ width (toString boardSize), height (toString boardSize), viewBox boardViewBox ]
+        [ boardView model.board
+        , dragView model
+        ]
+
+
+boardView : Board -> Svg ChessMsg
+boardView board =
+    g [ onMouseMove MouseMoved ]
+        (List.indexedMap rankView (Debug.log "board" board))
+
+
+onMouseMove : (MouseMove -> ChessMsg) -> Svg.Attribute ChessMsg
+onMouseMove callback =
+    Svg.Events.on "mousemove" (D.map callback mouseMoveDecoder)
+
+
+mouseMoveDecoder : D.Decoder MouseMove
+mouseMoveDecoder =
+    JDP.decode MouseMove
+        |> JDP.required "offsetX" D.int
+        |> JDP.required "offsetY" D.int
+
+
+dragView : ChessModel -> Svg ChessMsg
+dragView { drag, mousePosition } =
+    case drag of
+        Nothing ->
+            Svg.text ""
+
+        Just (Drag player piece) ->
+            pieceView piece player [ style "pointer-events: none;" ] (toFloat mousePosition.x) (toFloat mousePosition.y)
+
+
+boardViewBox : String
+boardViewBox =
+    [ 0, 0, boardSize, boardSize ]
+        |> List.map toString
+        |> String.join " "
+
+
+rankView : Int -> Rank -> Svg ChessMsg
+rankView rankIndex rank =
+    g [] (List.indexedMap (squareView rankIndex) rank)
+
+
+squareView : Int -> Int -> Square -> Svg ChessMsg
+squareView rankIndex fileIndex square =
+    svg
+        [ x (toString <| rankIndex * squareSize)
+        , y (toString <| (7 - fileIndex) * squareSize)
+        , width <| toString <| squareSize
+        , height <| toString <| squareSize
+        , onMouseUp (DragEnd (Location rankIndex fileIndex))
+        ]
+        [ squareFillView rankIndex fileIndex square
+        , coordinateAnnotationView rankIndex fileIndex
+        , squarePieceView square (Location rankIndex fileIndex)
+        ]
+
+
+squarePieceView square location =
+    case square of
+        Empty ->
+            g [] []
+
+        Occupied player piece ->
+            pieceView piece player [ onMouseDown (DragStart player piece location) ] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
+
+
+pieceView : Piece -> Player -> (List (Svg.Attribute msg) -> Float -> Float -> Svg msg)
+pieceView piece player attrs left top =
+    case piece of
+        Pawn ->
+            case player of
+                Black ->
+                    Piece.blackPawn attrs left top
+
+                White ->
+                    Piece.whitePawn attrs left top
+
+        Bishop ->
+            case player of
+                Black ->
+                    Piece.blackBishop attrs left top
+
+                White ->
+                    Piece.whiteBishop attrs left top
+
+        Knight ->
+            case player of
+                Black ->
+                    Piece.blackKnight attrs left top
+
+                White ->
+                    Piece.whiteKnight attrs left top
+
+        Monarch ->
+            case player of
+                Black ->
+                    Piece.blackKing attrs left top
+
+                White ->
+                    Piece.whiteKing attrs left top
+
+        Hand ->
+            case player of
+                Black ->
+                    Piece.blackQueen attrs left top
+
+                White ->
+                    Piece.whiteQueen attrs left top
+
+        Rook ->
+            case player of
+                Black ->
+                    Piece.blackRook attrs left top
+
+                White ->
+                    Piece.whiteRook attrs left top
+
+
+squareFillView : Int -> Int -> Square -> Svg ChessMsg
+squareFillView rankIndex fileIndex square =
+    rect
+        [ width (toString squareSize)
+        , height (toString squareSize)
+        , fill <| squareColor rankIndex fileIndex
+        ]
+        []
+
+
+squareColor : Int -> Int -> String
+squareColor rankIndex fileIndex =
+    if isEven (rankIndex + fileIndex) then
+        "#D8D2E1"
+    else
+        "#34435E"
+
+
+coordinateAnnotationView : Int -> Int -> Svg ChessMsg
+coordinateAnnotationView rankIndex fileIndex =
+    g [] <|
+        List.filterMap identity <|
+            [ if fileIndex == 0 then
+                Just <| letterView rankIndex
+              else
+                Nothing
+            , if rankIndex == 0 then
+                Just <| numberView fileIndex
+              else
+                Nothing
+            ]
+
+
+letterView : Int -> Svg ChessMsg
+letterView rankIndex =
+    text_
+        [ fontSize <| toString <| coordsFontSize
+        , x <| toString <| (squareSize - coordsFontSize)
+        , y <| toString <| (8 + squareSize - coordsFontSize)
+        ]
+        [ text (indexToRank rankIndex) ]
+
+
+coordsFontSize =
+    14
+
+
+numberView : Int -> Svg ChessMsg
+numberView fileIndex =
+    text_
+        [ fontSize <| toString <| coordsFontSize
+        , x "5"
+        , y "18"
+        ]
+        [ text <| toString <| fileIndex + 1 ]
+
+
+boardSize =
+    600
+
+
+squareSize =
+    boardSize // 8
+
+
+indexToRank index =
+    [ "a", "b", "c", "d", "e", "f", "g", "h" ]
+        |> List.getAt index
+        |> Maybe.withDefault ""
