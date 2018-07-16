@@ -30,11 +30,6 @@ type Piece
     | Pawn
 
 
-type Team
-    = Player
-    | Opponent
-
-
 type alias SquareLocation =
     { x : Int, y : Int }
 
@@ -42,7 +37,7 @@ type alias SquareLocation =
 type alias Placement =
     { square : SquareLocation
     , piece : Piece
-    , team : Team
+    , team : Player
     }
 
 
@@ -83,7 +78,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Generate ->
-            ( generate model, Cmd.none )
+            ( mapToBoard (generate model), Cmd.none )
 
         GeneratePlacement ->
             ( generatePlacement model, Cmd.none )
@@ -99,7 +94,70 @@ update msg model =
                 ( updatedChessModel, chessCmd ) =
                     chessUpdate chessMsg model.chessModel
             in
-            ( { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+            ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+
+
+mapToPlacements : Model -> Model
+mapToPlacements ({ placements, chessModel } as model) =
+    let
+        updatedPlacements =
+            buildPlacements chessModel.board
+    in
+    { model | placements = updatedPlacements }
+
+
+buildPlacements : Board -> List Placement
+buildPlacements board =
+    List.indexedMap
+        (\x row ->
+            List.indexedMap
+                (\y square ->
+                    case square of
+                        Empty ->
+                            Nothing
+
+                        Occupied player piece ->
+                            Just
+                                { piece = piece
+                                , team = player
+                                , square = { x = x + 1, y = y + 1 }
+                                }
+                )
+                row
+        )
+        board
+        |> List.concat
+        |> List.filterMap identity
+
+
+mapToBoard : Model -> Model
+mapToBoard ({ placements, chessModel } as model) =
+    let
+        updatedBoard =
+            buildBoard placements
+
+        updatedChessModel =
+            { chessModel | board = updatedBoard }
+    in
+    { model | chessModel = updatedChessModel }
+
+
+buildBoard : List Placement -> Board
+buildBoard placements =
+    List.map (\rowIndex -> buildRank placements rowIndex) (List.range 1 8)
+
+
+buildRank : List Placement -> Int -> Rank
+buildRank placements rowIndex =
+    List.map (\columnIndex -> buildSquaree placements rowIndex columnIndex) (List.range 1 8)
+
+
+buildSquaree : List Placement -> Int -> Int -> Square
+buildSquaree placements rowIndex columnIndex =
+    List.filter (\{ square } -> rowIndex == square.x && columnIndex == square.y) placements
+        |> List.head
+        |> Maybe.map (\{ piece, team } -> Occupied team piece)
+        |> Maybe.withDefault Empty
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -183,13 +241,13 @@ piece piece =
             E.string "p"
 
 
-team : Team -> E.Value
+team : Player -> E.Value
 team team =
     case team of
-        Player ->
+        Black ->
             E.string "b"
 
-        Opponent ->
+        White ->
             E.string "w"
 
 
@@ -301,7 +359,7 @@ monarchsNotAdjacent { placements, constructed } =
        ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
        ( 1,-1) . ( 1,0) . ( 1,1)
     -}
-    case ( findMonarch Player, findMonarch Opponent ) of
+    case ( findMonarch Black, findMonarch White ) of
         ( [ player ], [ opponent ] ) ->
             if
                 (abs (player.square.x - opponent.square.x) <= 1)
@@ -412,9 +470,9 @@ pieceGenerator =
             ]
 
 
-teamGenerator : Random.Generator Team
+teamGenerator : Random.Generator Player
 teamGenerator =
-    Random.choice Player Opponent
+    Random.choice Black White
 
 
 
@@ -540,17 +598,7 @@ chessInit =
 
 newGame : Board
 newGame =
-    List.transpose <|
-        List.reverse <|
-            [ [ Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Hand, Occupied Black Monarch, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook ]
-            , [ Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn ]
-            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
-            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
-            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
-            , [ Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty ]
-            , [ Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn ]
-            , [ Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Hand, Occupied White Monarch, Occupied White Bishop, Occupied White Knight, Occupied White Rook ]
-            ]
+    List.repeat 8 (List.repeat 8 Empty)
 
 
 
