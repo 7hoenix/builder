@@ -76,7 +76,7 @@ type Msg
     | GeneratePlacement
     | Validate
     | HandleGameUpdate String
-    | ChessMsg
+    | ChessMsg ChessMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -94,8 +94,12 @@ update msg model =
         HandleGameUpdate fen ->
             ( { model | currentGame = Just fen }, Cmd.none )
 
-        ChessMsg ->
-            ( model, Cmd.none )
+        ChessMsg chessMsg ->
+            let
+                ( updatedChessModel, chessCmd ) =
+                    chessUpdate chessMsg model.chessModel
+            in
+            ( { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -420,12 +424,12 @@ teamGenerator =
 view : Model -> Html Msg
 view model =
     div []
-        [ img [ src "/logo.svg" ] []
+        [ Html.map ChessMsg (chessView model.chessModel)
+        , h1 [] [ displayGame model.currentGame ]
         , h1 [] [ text (toString model.currentSeed) ]
         , h2 [] [ displayConstructed model.placements ]
         , button [ onClick Generate ] [ text "Generate content" ]
         , button [ onClick Validate ] [ text "Validate position" ]
-        , h1 [] [ displayGame model.currentGame ]
         ]
 
 
@@ -501,16 +505,6 @@ type Drag
 type Player
     = White
     | Black
-
-
-
--- type Piece
---     = Pawn
---     | Knight
---     | Bishop
---     | Rook
---     | Queen
---     | King
 
 
 type Square
