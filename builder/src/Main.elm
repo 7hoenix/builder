@@ -1,9 +1,9 @@
 module Main exposing (..)
 
 import Arithmetic exposing (isEven)
-import Html exposing (Html, button, div, h1, h2, img)
-import Html.Attributes exposing (src)
-import Html.Events exposing (onClick)
+import Html exposing (Html, button, div, h1, h2, img, input)
+import Html.Attributes as H exposing (src, type_, value, min, max)
+import Html.Events exposing (onClick, onInput)
 import Js
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
@@ -46,6 +46,7 @@ type alias Model =
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
+    , pointsAllowed2 : Int
     , chessModel : ChessModel
     }
 
@@ -55,7 +56,8 @@ init =
     ( { currentGame = Nothing
       , currentSeed = Random.initialSeed 12345
       , placements = []
-      , pointsAllowed = 6
+      , pointsAllowed = 22
+      , pointsAllowed2 = 2
       , chessModel = chessInit
       }
     , Cmd.none
@@ -71,6 +73,7 @@ type Msg
     | GeneratePlacement
     | Validate
     | HandleGameUpdate String
+    | HandleSliderChange String
     | ChessMsg ChessMsg
 
 
@@ -89,12 +92,19 @@ update msg model =
         HandleGameUpdate fen ->
             ( { model | currentGame = Just fen }, Cmd.none )
 
+        HandleSliderChange pointsAllowed ->
+            let
+                updatedPointsAllowed =
+                    String.toInt pointsAllowed |> Result.withDefault 0
+            in
+                ( { model | pointsAllowed2 = updatedPointsAllowed }, Cmd.none )
+
         ChessMsg chessMsg ->
             let
                 ( updatedChessModel, chessCmd ) =
                     chessUpdate chessMsg model.chessModel
             in
-            ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+                ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
 
 
 mapToPlacements : Model -> Model
@@ -103,7 +113,7 @@ mapToPlacements ({ placements, chessModel } as model) =
         updatedPlacements =
             buildPlacements chessModel.board
     in
-    { model | placements = updatedPlacements }
+        { model | placements = updatedPlacements }
 
 
 buildPlacements : Board -> List Placement
@@ -139,7 +149,7 @@ mapToBoard ({ placements, chessModel } as model) =
         updatedChessModel =
             { chessModel | board = updatedBoard }
     in
-    { model | chessModel = updatedChessModel }
+        { model | chessModel = updatedChessModel }
 
 
 buildBoard : List Placement -> Board
@@ -216,7 +226,7 @@ square square =
                 _ ->
                     Debug.crash "not valid x parameter :("
     in
-    E.string (row ++ toString square.y)
+        E.string (row ++ toString square.y)
 
 
 piece : Piece -> E.Value
@@ -260,10 +270,10 @@ generate model =
         atMaxScore =
             currentTotal model.placements == model.pointsAllowed
     in
-    if hasBothMonarchs && atMaxScore then
-        model
-    else
-        generate <| generatePlacement model
+        if hasBothMonarchs && atMaxScore then
+            model
+        else
+            generate <| generatePlacement model
 
 
 generatePlacement : Model -> Model
@@ -284,10 +294,10 @@ generatePlacement model =
             , team = team
             }
     in
-    { model
-        | currentSeed = evenMoarUpdatedSeed
-        , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
-    }
+        { model
+            | currentSeed = evenMoarUpdatedSeed
+            , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
+        }
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
@@ -319,15 +329,15 @@ isLegal pointsAllowed placements constructed =
         state =
             State placements constructed
     in
-    List.all (\validate -> validate state == Valid)
-        [ squareNotOpen
-        , monarchAlreadyPlaced
-        , monarchsNotAdjacent
-        , notTooManyPawns
-        , pawnsNotInEndRows
-        , doesntLeadToBalancedGame
-        , notEnoughPointsRemaining pointsAllowed
-        ]
+        List.all (\validate -> validate state == Valid)
+            [ squareNotOpen
+            , monarchAlreadyPlaced
+            , monarchsNotAdjacent
+            , notTooManyPawns
+            , pawnsNotInEndRows
+            , doesntLeadToBalancedGame
+            , notEnoughPointsRemaining pointsAllowed
+            ]
 
 
 squareNotOpen : State -> Validation
@@ -354,23 +364,23 @@ monarchsNotAdjacent { placements, constructed } =
                 (\p -> p.team == team && p.piece == Monarch)
                 (constructed :: placements)
     in
-    {- (-2,-1)
-       (-1,-1) . (-1,0) . (-1,1)
-       ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
-       ( 1,-1) . ( 1,0) . ( 1,1)
-    -}
-    case ( findMonarch Black, findMonarch White ) of
-        ( [ player ], [ opponent ] ) ->
-            if
-                (abs (player.square.x - opponent.square.x) <= 1)
-                    && (abs (player.square.y - opponent.square.y) <= 1)
-            then
-                Invalid
-            else
-                Valid
+        {- (-2,-1)
+           (-1,-1) . (-1,0) . (-1,1)
+           ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
+           ( 1,-1) . ( 1,0) . ( 1,1)
+        -}
+        case ( findMonarch Black, findMonarch White ) of
+            ( [ player ], [ opponent ] ) ->
+                if
+                    (abs (player.square.x - opponent.square.x) <= 1)
+                        && (abs (player.square.y - opponent.square.y) <= 1)
+                then
+                    Invalid
+                else
+                    Valid
 
-        _ ->
-            Valid
+            _ ->
+                Valid
 
 
 notTooManyPawns : State -> Validation
@@ -380,10 +390,10 @@ notTooManyPawns { placements, constructed } =
             List.filter (is Pawn) (constructed :: placements)
                 |> List.filter ((==) constructed.team << .team)
     in
-    if List.length forConstructed > 8 then
-        Invalid
-    else
-        Valid
+        if List.length forConstructed > 8 then
+            Invalid
+        else
+            Valid
 
 
 pawnsNotInEndRows : State -> Validation
@@ -403,13 +413,13 @@ doesntLeadToBalancedGame { placements, constructed } =
         ( constructedPlacements, otherPlacements ) =
             List.partition ((==) constructed.team << .team) placements
     in
-    if
-        (findPointValueFromPiece constructed.piece > 0)
-            && (currentTotal constructedPlacements > currentTotal otherPlacements)
-    then
-        Invalid
-    else
-        Valid
+        if
+            (findPointValueFromPiece constructed.piece > 0)
+                && (currentTotal constructedPlacements > currentTotal otherPlacements)
+        then
+            Invalid
+        else
+            Valid
 
 
 notEnoughPointsRemaining : Int -> State -> Validation
@@ -486,9 +496,23 @@ view model =
         , h1 [] [ displayGame model.currentGame ]
         , h1 [] [ text (toString model.currentSeed) ]
         , h2 [] [ displayConstructed model.placements ]
+        , makeSlider model
+        , text <| toString model.pointsAllowed2
         , button [ onClick Generate ] [ text "Generate content" ]
         , button [ onClick Validate ] [ text "Validate position" ]
         ]
+
+
+makeSlider : Model -> Html Msg
+makeSlider model =
+    input
+        [ type_ "range"
+        , H.min "0"
+        , H.max "20"
+        , value <| toString model.pointsAllowed2
+        , onInput HandleSliderChange
+        ]
+        []
 
 
 displayConstructed : List Placement -> Html Msg
@@ -522,12 +546,12 @@ decodeFen value =
         result =
             D.decodeValue (D.field "position" D.string) value
     in
-    case result of
-        Ok fen ->
-            HandleGameUpdate fen
+        case result of
+            Ok fen ->
+                HandleGameUpdate fen
 
-        Err error ->
-            Debug.crash ("fen decoding failed: " ++ error)
+            Err error ->
+                Debug.crash ("fen decoding failed: " ++ error)
 
 
 
@@ -623,14 +647,14 @@ chessUpdate msg model =
                 updatedBoard =
                     emptySquare location model.board
             in
-            ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
+                ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
 
         DragEnd location ->
             let
                 updatedBoard =
                     placePiece location model.drag model.board
             in
-            ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
+                ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
 
         MouseMoved { offsetX, offsetY } ->
             ( { model | mousePosition = { x = offsetX, y = offsetY } }, Cmd.none )
