@@ -544,26 +544,40 @@ makeSlider model =
         []
 
 
+
+---- KITTY ----
+
+
 viewKitty : Model -> Html Msg
 viewKitty model =
     div [ H.class "box" ]
-        [ div [ H.class "level" ]
-            (List.map
-                (\piece ->
-                    div [ H.class "level-item" ]
-                        [ kittyPieceView piece White ]
-                )
-                kittyPieces
+        (List.map (\team -> viewKittyTeam model team) [ White, Black ])
+
+
+viewKittyTeam : Model -> Player -> Html Msg
+viewKittyTeam model team =
+    let
+        pointsDeployed =
+            Debug.log "hi" (List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements)
+    in
+    div [ H.class "level" ]
+        (List.map
+            (\piece ->
+                let
+                    isDisabled =
+                        model.pointsAllowed < pointsDeployed + findPointValueFromPiece piece
+                in
+                div [ H.class "level-item" ]
+                    [ button
+                        [ H.class "button is-white"
+                        , H.disabled isDisabled
+                        , H.style [ ( "height", "100%" ) ]
+                        ]
+                        [ kittyPieceView piece team ]
+                    ]
             )
-        , div [ H.class "level" ]
-            (List.map
-                (\piece ->
-                    div [ H.class "level-item" ]
-                        [ kittyPieceView piece Black ]
-                )
-                kittyPieces
-            )
-        ]
+            kittyPieces
+        )
 
 
 kittyPieces : List Piece
