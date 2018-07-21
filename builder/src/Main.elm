@@ -1,10 +1,9 @@
 module Main exposing (..)
 
 import Arithmetic exposing (isEven)
-import Debounce exposing (Debounce)
 import Html exposing (Html, button, div, h1, h2, img, input)
-import Html.Attributes as H exposing (max, min, src, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html.Attributes as H exposing (defaultValue, max, min, src, type_)
+import Html.Events exposing (on, onClick, targetValue)
 import Js
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
@@ -16,12 +15,9 @@ import Random.Pcg as Random
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
-import Task exposing (perform, succeed)
-import Time exposing (..)
 
 
 ---- MODEL ----
--- Monarch can't be placed in player check
 
 
 type Piece
@@ -44,36 +40,24 @@ type alias Placement =
     }
 
 
-debounceConfig : Debounce.Config Msg
-debounceConfig =
-    { strategy = Debounce.later (1 * second)
-    , transform = DebounceMsg
-    }
-
-
 type alias Model =
     { currentGame : Maybe String
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
-    , pointsAllowed2 : Int
-    , debounce : Debounce Int
-    , report : List Int
     , chessModel : ChessModel
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { currentGame = Nothing
-      , currentSeed = Random.initialSeed 12345
-      , placements = []
-      , pointsAllowed = 22
-      , pointsAllowed2 = 2
-      , debounce = Debounce.init
-      , report = []
-      , chessModel = chessInit
-      }
+    ( generate
+        { currentGame = Nothing
+        , currentSeed = Random.initialSeed 12345
+        , placements = []
+        , pointsAllowed = 22
+        , chessModel = chessInit
+        }
     , Cmd.none
     )
 
@@ -83,25 +67,15 @@ init =
 
 
 type Msg
-    = Generate
-    | GeneratePlacement
-    | Validate
+    = Validate
     | HandleGameUpdate String
-    | HandleSliderChange String
-    | Saved Int
-    | DebounceMsg Debounce.Msg
+    | HandleSliderChange Int
     | ChessMsg ChessMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Generate ->
-            ( mapToBoard (generate model), Cmd.none )
-
-        GeneratePlacement ->
-            ( generatePlacement model, Cmd.none )
-
         Validate ->
             ( model, sendPlacements model.placements )
 
@@ -109,24 +83,7 @@ update msg model =
             ( { model | currentGame = Just fen }, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
-            let
-                updatedPointsAllowed =
-                    String.toInt pointsAllowed |> Result.withDefault 0
-
-                ( debounce, cmd ) =
-                    Debounce.push debounceConfig updatedPointsAllowed model.debounce
-            in
-            ( { model | pointsAllowed2 = updatedPointsAllowed, debounce = debounce }, cmd )
-
-        Saved pointsAllowed ->
-            ( { model | report = pointsAllowed :: model.report }, Cmd.none )
-
-        DebounceMsg msg ->
-            let
-                ( debounce, cmd ) =
-                    Debounce.update debounceConfig (Debounce.takeLast save) msg model.debounce
-            in
-            ( { model | debounce = debounce }, cmd )
+            ( generate { model | pointsAllowed = pointsAllowed, placements = [] }, Cmd.none )
 
         ChessMsg chessMsg ->
             let
@@ -134,11 +91,6 @@ update msg model =
                     chessUpdate chessMsg model.chessModel
             in
             ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
-
-
-save : Int -> Cmd Msg
-save value =
-    Task.perform Saved (Task.succeed value)
 
 
 mapToPlacements : Model -> Model
@@ -305,7 +257,7 @@ generate model =
             currentTotal model.placements == model.pointsAllowed
     in
     if hasBothMonarchs && atMaxScore then
-        model
+        mapToBoard model
     else
         generate <| generatePlacement model
 
@@ -529,10 +481,8 @@ view model =
         [ Html.map ChessMsg (chessView model.chessModel)
         , h1 [] [ displayGame model.currentGame ]
         , h1 [] [ text (toString model.currentSeed) ]
-        , h2 [] [ displayConstructed model.placements ]
         , makeSlider model
-        , text <| toString model.pointsAllowed2
-        , button [ onClick Generate ] [ text "Generate content" ]
+        , text <| toString model.pointsAllowed
         , button [ onClick Validate ] [ text "Validate position" ]
         ]
 
@@ -541,12 +491,22 @@ makeSlider : Model -> Html Msg
 makeSlider model =
     input
         [ type_ "range"
-        , H.min "0"
-        , H.max "20"
-        , value <| toString model.pointsAllowed2
-        , onInput HandleSliderChange
+        , H.min "1"
+        , H.max "22"
+        , defaultValue <| toString model.pointsAllowed
+        , on "input" (targetValue |> D.andThen parseInt)
         ]
         []
+
+
+parseInt : String -> D.Decoder Msg
+parseInt rawString =
+    case String.toInt rawString of
+        Err err ->
+            D.fail err
+
+        Ok int ->
+            D.succeed (HandleSliderChange int)
 
 
 displayConstructed : List Placement -> Html Msg
