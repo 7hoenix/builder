@@ -487,12 +487,10 @@ view model =
                     ]
                     [ Html.map ChessMsg (chessView model.chessModel) ]
                 , div [ H.class "column" ]
-                    [ h1 [] [ displayGame model.currentGame ]
-                    , h1 [] [ text (toString model.currentSeed) ]
-                    , viewKitty model
+                    [ viewKitty model
                     , makeSlider model
                     , text <| toString model.pointsAllowed
-                    , button [ onClick Validate ] [ text "Validate position" ]
+                    , div [] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
                     ]
                 ]
             ]
