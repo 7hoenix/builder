@@ -3,7 +3,7 @@ module Main exposing (..)
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
-import Html.Attributes as H exposing (defaultValue, href, max, min, src, type_)
+import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Js
 import Json.Decode as D
@@ -506,7 +506,8 @@ viewNavbar =
         [ div [ H.class "navbar-brand" ]
             [ a
                 [ H.class "navbar-item"
-                , H.href "https://chesstrained.com"
+                , H.href "https://github.com/7hoenix/procedural-gen"
+                , H.target "_blank"
                 ]
                 [ h1 [] [ text "Builder" ] ]
             , div
