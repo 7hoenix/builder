@@ -13,3 +13,23 @@ img {
   margin: 20px 0;
   max-width: 200px;
 }
+
+
+.outer {
+  display: flex;
+  flex-direction: column;
+}
+
+@media screen and (min-width: 769px) {
+  .outer {
+    flex-direction: row;
+  }
+}
+
+.container-two-thirds {
+  flex: 2;
+}
+
+.container-one-third {
+  flex: 1;
+}

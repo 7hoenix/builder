@@ -478,13 +478,15 @@ teamGenerator =
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ Html.map ChessMsg (chessView model.chessModel)
-        , h1 [] [ displayGame model.currentGame ]
-        , h1 [] [ text (toString model.currentSeed) ]
-        , makeSlider model
-        , text <| toString model.pointsAllowed
-        , button [ onClick Validate ] [ text "Validate position" ]
+    div [ H.attribute "class" "outer" ]
+        [ div [ H.attribute "class" "container-two-thirds" ] [ Html.map ChessMsg (chessView model.chessModel) ]
+        , div [ H.attribute "class" "container-one-third" ]
+            [ h1 [] [ displayGame model.currentGame ]
+            , h1 [] [ text (toString model.currentSeed) ]
+            , makeSlider model
+            , text <| toString model.pointsAllowed
+            , button [ onClick Validate ] [ text "Validate position" ]
+            ]
         ]
 
 
