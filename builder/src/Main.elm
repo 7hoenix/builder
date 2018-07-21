@@ -1,5 +1,6 @@
 module Main exposing (..)
 
+import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import Html exposing (Html, button, div, h1, h2, img, input)
 import Html.Attributes as H exposing (defaultValue, max, min, src, type_)
@@ -816,9 +817,9 @@ squareFillView rankIndex fileIndex square =
 squareColor : Int -> Int -> String
 squareColor rankIndex fileIndex =
     if isEven (rankIndex + fileIndex) then
-        "#D8D2E1"
+        palette.purple
     else
-        "#34435E"
+        palette.gray
 
 
 coordinateAnnotationView : Int -> Int -> Svg ChessMsg
