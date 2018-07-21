@@ -1,8 +1,9 @@
 module Main exposing (..)
 
 import Arithmetic exposing (isEven)
+import Debounce exposing (Debounce)
 import Html exposing (Html, button, div, h1, h2, img, input)
-import Html.Attributes as H exposing (src, type_, value, min, max)
+import Html.Attributes as H exposing (max, min, src, type_, value)
 import Html.Events exposing (onClick, onInput)
 import Js
 import Json.Decode as D
@@ -15,6 +16,8 @@ import Random.Pcg as Random
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
+import Task exposing (perform, succeed)
+import Time exposing (..)
 
 
 ---- MODEL ----
@@ -41,12 +44,21 @@ type alias Placement =
     }
 
 
+debounceConfig : Debounce.Config Msg
+debounceConfig =
+    { strategy = Debounce.later (1 * second)
+    , transform = DebounceMsg
+    }
+
+
 type alias Model =
     { currentGame : Maybe String
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     , pointsAllowed2 : Int
+    , debounce : Debounce Int
+    , report : List Int
     , chessModel : ChessModel
     }
 
@@ -58,6 +70,8 @@ init =
       , placements = []
       , pointsAllowed = 22
       , pointsAllowed2 = 2
+      , debounce = Debounce.init
+      , report = []
       , chessModel = chessInit
       }
     , Cmd.none
@@ -74,6 +88,8 @@ type Msg
     | Validate
     | HandleGameUpdate String
     | HandleSliderChange String
+    | Saved Int
+    | DebounceMsg Debounce.Msg
     | ChessMsg ChessMsg
 
 
@@ -96,15 +112,33 @@ update msg model =
             let
                 updatedPointsAllowed =
                     String.toInt pointsAllowed |> Result.withDefault 0
+
+                ( debounce, cmd ) =
+                    Debounce.push debounceConfig updatedPointsAllowed model.debounce
             in
-                ( { model | pointsAllowed2 = updatedPointsAllowed }, Cmd.none )
+            ( { model | pointsAllowed2 = updatedPointsAllowed, debounce = debounce }, cmd )
+
+        Saved pointsAllowed ->
+            ( { model | report = pointsAllowed :: model.report }, Cmd.none )
+
+        DebounceMsg msg ->
+            let
+                ( debounce, cmd ) =
+                    Debounce.update debounceConfig (Debounce.takeLast save) msg model.debounce
+            in
+            ( { model | debounce = debounce }, cmd )
 
         ChessMsg chessMsg ->
             let
                 ( updatedChessModel, chessCmd ) =
                     chessUpdate chessMsg model.chessModel
             in
-                ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+            ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+
+
+save : Int -> Cmd Msg
+save value =
+    Task.perform Saved (Task.succeed value)
 
 
 mapToPlacements : Model -> Model
@@ -113,7 +147,7 @@ mapToPlacements ({ placements, chessModel } as model) =
         updatedPlacements =
             buildPlacements chessModel.board
     in
-        { model | placements = updatedPlacements }
+    { model | placements = updatedPlacements }
 
 
 buildPlacements : Board -> List Placement
@@ -149,7 +183,7 @@ mapToBoard ({ placements, chessModel } as model) =
         updatedChessModel =
             { chessModel | board = updatedBoard }
     in
-        { model | chessModel = updatedChessModel }
+    { model | chessModel = updatedChessModel }
 
 
 buildBoard : List Placement -> Board
@@ -226,7 +260,7 @@ square square =
                 _ ->
                     Debug.crash "not valid x parameter :("
     in
-        E.string (row ++ toString square.y)
+    E.string (row ++ toString square.y)
 
 
 piece : Piece -> E.Value
@@ -270,10 +304,10 @@ generate model =
         atMaxScore =
             currentTotal model.placements == model.pointsAllowed
     in
-        if hasBothMonarchs && atMaxScore then
-            model
-        else
-            generate <| generatePlacement model
+    if hasBothMonarchs && atMaxScore then
+        model
+    else
+        generate <| generatePlacement model
 
 
 generatePlacement : Model -> Model
@@ -294,10 +328,10 @@ generatePlacement model =
             , team = team
             }
     in
-        { model
-            | currentSeed = evenMoarUpdatedSeed
-            , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
-        }
+    { model
+        | currentSeed = evenMoarUpdatedSeed
+        , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
+    }
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
@@ -329,15 +363,15 @@ isLegal pointsAllowed placements constructed =
         state =
             State placements constructed
     in
-        List.all (\validate -> validate state == Valid)
-            [ squareNotOpen
-            , monarchAlreadyPlaced
-            , monarchsNotAdjacent
-            , notTooManyPawns
-            , pawnsNotInEndRows
-            , doesntLeadToBalancedGame
-            , notEnoughPointsRemaining pointsAllowed
-            ]
+    List.all (\validate -> validate state == Valid)
+        [ squareNotOpen
+        , monarchAlreadyPlaced
+        , monarchsNotAdjacent
+        , notTooManyPawns
+        , pawnsNotInEndRows
+        , doesntLeadToBalancedGame
+        , notEnoughPointsRemaining pointsAllowed
+        ]
 
 
 squareNotOpen : State -> Validation
@@ -364,23 +398,23 @@ monarchsNotAdjacent { placements, constructed } =
                 (\p -> p.team == team && p.piece == Monarch)
                 (constructed :: placements)
     in
-        {- (-2,-1)
-           (-1,-1) . (-1,0) . (-1,1)
-           ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
-           ( 1,-1) . ( 1,0) . ( 1,1)
-        -}
-        case ( findMonarch Black, findMonarch White ) of
-            ( [ player ], [ opponent ] ) ->
-                if
-                    (abs (player.square.x - opponent.square.x) <= 1)
-                        && (abs (player.square.y - opponent.square.y) <= 1)
-                then
-                    Invalid
-                else
-                    Valid
-
-            _ ->
+    {- (-2,-1)
+       (-1,-1) . (-1,0) . (-1,1)
+       ( 0,-1) . ( 0,0) . ( 0,1) . ( 0,5)
+       ( 1,-1) . ( 1,0) . ( 1,1)
+    -}
+    case ( findMonarch Black, findMonarch White ) of
+        ( [ player ], [ opponent ] ) ->
+            if
+                (abs (player.square.x - opponent.square.x) <= 1)
+                    && (abs (player.square.y - opponent.square.y) <= 1)
+            then
+                Invalid
+            else
                 Valid
+
+        _ ->
+            Valid
 
 
 notTooManyPawns : State -> Validation
@@ -390,10 +424,10 @@ notTooManyPawns { placements, constructed } =
             List.filter (is Pawn) (constructed :: placements)
                 |> List.filter ((==) constructed.team << .team)
     in
-        if List.length forConstructed > 8 then
-            Invalid
-        else
-            Valid
+    if List.length forConstructed > 8 then
+        Invalid
+    else
+        Valid
 
 
 pawnsNotInEndRows : State -> Validation
@@ -413,13 +447,13 @@ doesntLeadToBalancedGame { placements, constructed } =
         ( constructedPlacements, otherPlacements ) =
             List.partition ((==) constructed.team << .team) placements
     in
-        if
-            (findPointValueFromPiece constructed.piece > 0)
-                && (currentTotal constructedPlacements > currentTotal otherPlacements)
-        then
-            Invalid
-        else
-            Valid
+    if
+        (findPointValueFromPiece constructed.piece > 0)
+            && (currentTotal constructedPlacements > currentTotal otherPlacements)
+    then
+        Invalid
+    else
+        Valid
 
 
 notEnoughPointsRemaining : Int -> State -> Validation
@@ -546,12 +580,12 @@ decodeFen value =
         result =
             D.decodeValue (D.field "position" D.string) value
     in
-        case result of
-            Ok fen ->
-                HandleGameUpdate fen
+    case result of
+        Ok fen ->
+            HandleGameUpdate fen
 
-            Err error ->
-                Debug.crash ("fen decoding failed: " ++ error)
+        Err error ->
+            Debug.crash ("fen decoding failed: " ++ error)
 
 
 
@@ -647,14 +681,14 @@ chessUpdate msg model =
                 updatedBoard =
                     emptySquare location model.board
             in
-                ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
+            ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
 
         DragEnd location ->
             let
                 updatedBoard =
                     placePiece location model.drag model.board
             in
-                ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
+            ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
 
         MouseMoved { offsetX, offsetY } ->
             ( { model | mousePosition = { x = offsetX, y = offsetY } }, Cmd.none )
