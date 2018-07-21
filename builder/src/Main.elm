@@ -487,9 +487,9 @@ view model =
                     ]
                     [ Html.map ChessMsg (chessView model.chessModel) ]
                 , div [ H.class "column" ]
-                    [ viewKitty model
+                    [ h1 [] [ text <| "Level " ++ toString model.pointsAllowed ]
                     , makeSlider model
-                    , text <| toString model.pointsAllowed
+                    , viewKitty model
                     , div [] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
                     ]
                 ]
@@ -544,6 +544,16 @@ makeSlider model =
         []
 
 
+parseInt : String -> D.Decoder Msg
+parseInt rawString =
+    case String.toInt rawString of
+        Err err ->
+            D.fail err
+
+        Ok int ->
+            D.succeed (HandleSliderChange int)
+
+
 
 ---- KITTY ----
 
@@ -558,7 +568,7 @@ viewKittyTeam : Model -> Player -> Html Msg
 viewKittyTeam model team =
     let
         pointsDeployed =
-            Debug.log "hi" (List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements)
+            List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements
     in
     div [ H.class "level" ]
         (List.map
@@ -588,32 +598,6 @@ kittyPieces =
 kittyPieceView : Piece -> Player -> Svg Msg
 kittyPieceView piece player =
     pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
-
-
-parseInt : String -> D.Decoder Msg
-parseInt rawString =
-    case String.toInt rawString of
-        Err err ->
-            D.fail err
-
-        Ok int ->
-            D.succeed (HandleSliderChange int)
-
-
-displayConstructed : List Placement -> Html Msg
-displayConstructed constructedElements =
-    List.foldr (\element result -> result ++ " " ++ toString element.square ++ " \x0D\n " ++ toString element.piece ++ " " ++ toString element.team) "" constructedElements
-        |> text
-
-
-displayGame : Maybe String -> Html Msg
-displayGame maybeFen =
-    case maybeFen of
-        Nothing ->
-            text "No game here"
-
-        Just fen ->
-            text fen
 
 
 
@@ -833,6 +817,7 @@ squareView rankIndex fileIndex square =
         ]
 
 
+squarePieceView : Square -> Location -> Svg ChessMsg
 squarePieceView square location =
     case square of
         Empty ->
@@ -937,6 +922,7 @@ letterView rankIndex =
         [ text (indexToRank rankIndex) ]
 
 
+coordsFontSize : Int
 coordsFontSize =
     14
 
@@ -951,14 +937,17 @@ numberView fileIndex =
         [ text <| toString <| fileIndex + 1 ]
 
 
+boardSize : Int
 boardSize =
     600
 
 
+squareSize : Int
 squareSize =
     boardSize // 8
 
 
+indexToRank : Int -> String
 indexToRank index =
     [ "a", "b", "c", "d", "e", "f", "g", "h" ]
         |> List.getAt index
