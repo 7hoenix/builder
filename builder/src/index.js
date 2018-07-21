@@ -1,3 +1,4 @@
+import "bulma/css/bulma.css";
 import "./main.css";
 import Chess from "chess.js/chess";
 import { Main } from "./Main.elm";

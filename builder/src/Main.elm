@@ -2,8 +2,8 @@ module Main exposing (..)
 
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
-import Html exposing (Html, button, div, h1, h2, img, input)
-import Html.Attributes as H exposing (defaultValue, max, min, src, type_)
+import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
+import Html.Attributes as H exposing (defaultValue, href, max, min, src, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Js
 import Json.Decode as D
@@ -478,14 +478,56 @@ teamGenerator =
 
 view : Model -> Html Msg
 view model =
-    div [ H.attribute "class" "outer" ]
-        [ div [ H.attribute "class" "container-two-thirds" ] [ Html.map ChessMsg (chessView model.chessModel) ]
-        , div [ H.attribute "class" "container-one-third" ]
-            [ h1 [] [ displayGame model.currentGame ]
-            , h1 [] [ text (toString model.currentSeed) ]
-            , makeSlider model
-            , text <| toString model.pointsAllowed
-            , button [ onClick Validate ] [ text "Validate position" ]
+    div []
+        [ viewNavbar
+        , section [ H.class "section" ]
+            [ div [ H.class "container columns" ]
+                [ div
+                    [ H.class "column is-three-quarters"
+                    ]
+                    [ Html.map ChessMsg (chessView model.chessModel) ]
+                , div [ H.class "column" ]
+                    [ h1 [] [ displayGame model.currentGame ]
+                    , h1 [] [ text (toString model.currentSeed) ]
+                    , makeSlider model
+                    , text <| toString model.pointsAllowed
+                    , button [ onClick Validate ] [ text "Validate position" ]
+                    ]
+                ]
+            ]
+        ]
+
+
+viewNavbar : Html Msg
+viewNavbar =
+    nav
+        [ H.class "navbar has-shadow is-spaced" ]
+        [ div [ H.class "navbar-brand" ]
+            [ a
+                [ H.class "navbar-item"
+                , H.href "https://chesstrained.com"
+                ]
+                [ h1 [] [ text "Builder" ] ]
+            , div
+                [ H.class "navbar-burger, burger"
+                ]
+                [ span
+                    [ H.attribute "aria-hidden" "true"
+                    ]
+                    []
+                , span
+                    [ H.attribute "aria-hidden" "true"
+                    ]
+                    []
+                , span
+                    [ H.attribute "aria-hidden" "true"
+                    ]
+                    []
+                ]
+            ]
+        , div [ H.class "navbar-menu" ]
+            [ div [ H.class "navbar-start" ] []
+            , div [ H.class "navbar-end" ] []
             ]
         ]
 
