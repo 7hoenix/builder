@@ -489,6 +489,7 @@ view model =
                 , div [ H.class "column" ]
                     [ h1 [] [ displayGame model.currentGame ]
                     , h1 [] [ text (toString model.currentSeed) ]
+                    , viewKitty model
                     , makeSlider model
                     , text <| toString model.pointsAllowed
                     , button [ onClick Validate ] [ text "Validate position" ]
@@ -542,6 +543,38 @@ makeSlider model =
         , on "input" (targetValue |> D.andThen parseInt)
         ]
         []
+
+
+viewKitty : Model -> Html Msg
+viewKitty model =
+    div [ H.class "box" ]
+        [ div [ H.class "level" ]
+            (List.map
+                (\piece ->
+                    div [ H.class "level-item" ]
+                        [ kittyPieceView piece White ]
+                )
+                kittyPieces
+            )
+        , div [ H.class "level" ]
+            (List.map
+                (\piece ->
+                    div [ H.class "level-item" ]
+                        [ kittyPieceView piece Black ]
+                )
+                kittyPieces
+            )
+        ]
+
+
+kittyPieces : List Piece
+kittyPieces =
+    [ Hand, Rook, Bishop, Knight, Pawn ]
+
+
+kittyPieceView : Piece -> Player -> Svg Msg
+kittyPieceView piece player =
+    pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
 
 
 parseInt : String -> D.Decoder Msg
