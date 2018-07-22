@@ -34,6 +34,10 @@ type alias SquareLocation =
     { x : Int, y : Int }
 
 
+
+-- This could just be Square
+
+
 type alias Placement =
     { square : SquareLocation
     , piece : Piece
@@ -56,7 +60,7 @@ init =
         { currentGame = Nothing
         , currentSeed = Random.initialSeed 12345
         , placements = []
-        , pointsAllowed = 22
+        , pointsAllowed = 1
         , chessModel = chessInit
         }
     , Cmd.none
@@ -76,7 +80,7 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
+    case Debug.log "update" msg of
         Validate ->
             ( model, sendPlacements model.placements )
 
@@ -536,6 +540,7 @@ makeSlider : Model -> Html Msg
 makeSlider model =
     input
         [ type_ "range"
+        , H.class "knob"
         , H.min "1"
         , H.max "22"
         , defaultValue <| toString model.pointsAllowed
@@ -564,30 +569,50 @@ viewKitty model =
         (List.map (\team -> viewKittyTeam model team) [ White, Black ])
 
 
-viewKittyTeam : Model -> Player -> Html Msg
+viewKittyTeam : Model -> Player -> Svg Msg
 viewKittyTeam model team =
     let
         pointsDeployed =
             List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements
     in
-    div [ H.class "level" ]
-        (List.map
-            (\piece ->
-                let
-                    isDisabled =
-                        model.pointsAllowed < pointsDeployed + findPointValueFromPiece piece
-                in
-                div [ H.class "level-item" ]
-                    [ button
-                        [ H.class "button is-white"
-                        , H.disabled isDisabled
-                        , H.style [ ( "height", "100%" ) ]
-                        ]
-                        [ kittyPieceView piece team ]
-                    ]
-            )
-            kittyPieces
-        )
+    g [ H.class "level" ]
+        (List.map (\piece -> kittyPieceVieww piece model.pointsAllowed pointsDeployed team) kittyPieces)
+
+
+
+-- div [ H.class "level" ]
+--     (List.map (\piece -> kittyPieceVieww piece model.pointsAllowed pointsDeployed team) kittyPieces)
+
+
+kittyPieceVieww : Piece -> Int -> Int -> Player -> Html Msg
+kittyPieceVieww piece pointsAllowed pointsDeployed team =
+    let
+        isDisabled =
+            pointsAllowed < pointsDeployed + findPointValueFromPiece piece
+    in
+    if isDisabled then
+        -- svg
+        --     []
+        --     [ boardView model.board
+        --     , dragView model
+        --     ]
+        div [ H.class "level-item" ]
+            [ button
+                [ H.class "button is-white"
+                , H.disabled True
+                , H.style [ ( "height", "100%" ) ]
+                ]
+                [ kittyPieceView piece team ]
+            ]
+    else
+        div [ H.class "level-item" ]
+            [ button
+                [ H.class "button is-white"
+                , H.disabled False
+                , H.style [ ( "height", "100%" ) ]
+                ]
+                [ kittyPieceView piece team ]
+            ]
 
 
 kittyPieces : List Piece
@@ -665,6 +690,7 @@ type Square
 
 type Location
     = Location Int Int
+    | OffBoard
 
 
 type alias Board =
@@ -730,8 +756,13 @@ chessUpdate msg model =
 
 
 emptySquare : Location -> Board -> Board
-emptySquare (Location rankIndex fileIndex) board =
-    List.updateAt rankIndex (\rank -> emptySquareInRank rank fileIndex) board
+emptySquare location board =
+    case location of
+        OffBoard ->
+            board
+
+        Location rankIndex fileIndex ->
+            List.updateAt rankIndex (\rank -> emptySquareInRank rank fileIndex) board
 
 
 emptySquareInRank : Rank -> Int -> Rank
@@ -740,12 +771,15 @@ emptySquareInRank rank fileIndex =
 
 
 placePiece : Location -> Maybe Drag -> Board -> Board
-placePiece (Location rankIndex fileIndex) drag board =
-    case drag of
-        Nothing ->
+placePiece location drag board =
+    case ( location, drag ) of
+        ( _, Nothing ) ->
             board
 
-        Just (Drag player piece) ->
+        ( OffBoard, Just (Drag player piece) ) ->
+            board
+
+        ( Location rankIndex fileIndex, Just (Drag player piece) ) ->
             List.updateAt rankIndex (\rank -> List.updateAt fileIndex (\_ -> Occupied player piece) rank) board
 
 

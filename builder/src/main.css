@@ -33,3 +33,13 @@ img {
 .container-one-third {
   flex: 1;
 }
+
+input[type='range'] {
+
+  background-color: #13bba4;
+  color: #13bba4;
+}
+
+.knob {
+  background-color: #13bba4;
+}
