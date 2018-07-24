@@ -1,9 +1,14 @@
-const express = require('express')
-var app = express()
+const express = require("express");
+var cors = require("cors");
+var app = express();
 
-app.get('/', (req, res) => {
+app.get("/api/lesson", cors(), (req, res, next) => {
   console.log(req);
-  res.send('hello world')
-})
+  res.json({
+    msg: "lesson content",
+    data: { lesson: "some lesson" }
+  });
+  res.send("hello world");
+});
 
-app.listen(3001, () => console.log('example app listening'))
+app.listen(3001, () => console.log("Listening"));

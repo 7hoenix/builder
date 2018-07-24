@@ -5,6 +5,7 @@ import Arithmetic exposing (isEven)
 import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
+import Http exposing (Request, getString)
 import Js
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
@@ -71,6 +72,8 @@ type Msg
     = Validate
     | HandleGameUpdate String
     | HandleSliderChange Int
+    | GetLesson
+    | FetchLessonCompleted (Result Http.Error String)
     | ChessMsg ChessMsg
 
 
@@ -86,12 +89,56 @@ update msg model =
         HandleSliderChange pointsAllowed ->
             ( generate { model | pointsAllowed = pointsAllowed, placements = [] }, Cmd.none )
 
+        GetLesson ->
+            ( model, fetchLessonCmd )
+
+        FetchLessonCompleted result ->
+            fetchLessonCompleted model result
+
         ChessMsg chessMsg ->
             let
                 ( updatedChessModel, chessCmd ) =
                     chessUpdate chessMsg model.chessModel
             in
             ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+
+
+
+---- SUBMIT LESSON ----
+
+
+api : String
+api =
+    "http://localhost:3001/"
+
+
+submitLessonUrl : String
+submitLessonUrl =
+    api ++ "api/lesson"
+
+
+fetchLesson : Http.Request String
+fetchLesson =
+    Http.getString submitLessonUrl
+
+
+fetchLessonCmd : Cmd Msg
+fetchLessonCmd =
+    Http.send FetchLessonCompleted fetchLesson
+
+
+fetchLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
+fetchLessonCompleted model result =
+    case Debug.log "fetch result" result of
+        Ok newLesson ->
+            ( { model | currentGame = Just newLesson }, Cmd.none )
+
+        Err _ ->
+            ( model, Cmd.none )
+
+
+
+---- PLACEMENTS ----
 
 
 mapToPlacements : Model -> Model
@@ -491,9 +538,23 @@ view model =
                     , makeSlider model
                     , viewKitty model
                     , div [] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
+                    , div [] [ button [ onClick GetLesson, H.class "button is-info" ] [ text "Get Lesson" ] ]
+                    , viewCurrentGame model
                     ]
                 ]
             ]
+        ]
+
+
+viewCurrentGame : Model -> Html Msg
+viewCurrentGame { currentGame } =
+    h2 []
+        [ case currentGame of
+            Nothing ->
+                text ""
+
+            Just game ->
+                text game
         ]
 
 
