@@ -5,7 +5,7 @@ import Arithmetic exposing (isEven)
 import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
-import Http exposing (Request, getString)
+import Http exposing (Request, getString, jsonBody)
 import Js
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
@@ -74,6 +74,7 @@ type Msg
     | HandleSliderChange Int
     | GetLesson
     | FetchLessonCompleted (Result Http.Error String)
+    | PostLessonCompleted (Result Http.Error String)
     | ChessMsg ChessMsg
 
 
@@ -84,7 +85,7 @@ update msg model =
             ( model, sendPlacements model.placements )
 
         HandleGameUpdate fen ->
-            ( { model | currentGame = Just fen }, Cmd.none )
+            ( { model | currentGame = Just fen }, postLessonCmd model fen )
 
         HandleSliderChange pointsAllowed ->
             ( generate { model | pointsAllowed = pointsAllowed, placements = [] }, Cmd.none )
@@ -94,6 +95,9 @@ update msg model =
 
         FetchLessonCompleted result ->
             fetchLessonCompleted model result
+
+        PostLessonCompleted result ->
+            postLessonCompleted model result
 
         ChessMsg chessMsg ->
             let
@@ -114,7 +118,7 @@ api =
 
 submitLessonUrl : String
 submitLessonUrl =
-    api ++ "api/lesson"
+    api ++ "api/lesson/0"
 
 
 fetchLesson : Http.Request String
@@ -132,6 +136,28 @@ fetchLessonCompleted model result =
     case Debug.log "fetch result" result of
         Ok newLesson ->
             ( { model | currentGame = Just newLesson }, Cmd.none )
+
+        Err _ ->
+            ( model, Cmd.none )
+
+
+postLessonCmd : Model -> String -> Cmd Msg
+postLessonCmd model fen =
+    let
+        body =
+            jsonBody (E.object [ ( "fen", E.string fen ) ])
+
+        request =
+            Http.post "http://localhost:3001/api/lesson" body (D.succeed "cake")
+    in
+    Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
+
+
+postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
+postLessonCompleted model result =
+    case Debug.log "post result" result of
+        Ok thing ->
+            ( model, Cmd.none )
 
         Err _ ->
             ( model, Cmd.none )
