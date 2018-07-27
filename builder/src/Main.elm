@@ -152,7 +152,18 @@ fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
 fetchSeedCompleted model result =
     case Debug.log "fetch new seed result:" result of
         Ok seed ->
-            ( generate { model | initialSeed = Random.initialSeed seed, placements = [] }, Cmd.none )
+            let
+                nextSeed =
+                    Random.initialSeed seed
+            in
+            ( generate
+                { model
+                    | initialSeed = nextSeed
+                    , currentSeed = Random.fastForward model.pointsAllowed nextSeed
+                    , placements = []
+                }
+            , Cmd.none
+            )
 
         Err _ ->
             ( model, Cmd.none )
@@ -413,6 +424,7 @@ isLegal pointsAllowed placements constructed =
         , notTooManyPawns
         , pawnsNotInEndRows
         , doesntLeadToBalancedGame
+        , alreadyPlacedMaximum
         , notEnoughPointsRemaining pointsAllowed
         ]
 
@@ -497,6 +509,48 @@ doesntLeadToBalancedGame { placements, constructed } =
         Invalid
     else
         Valid
+
+
+alreadyPlacedMaximum : State -> Validation
+alreadyPlacedMaximum { placements, constructed } =
+    let
+        applicablePlacements =
+            List.filter (\placement -> placement.piece == constructed.piece && placement.team == constructed.team) placements
+
+        maxValue =
+            maximumPieceCount (List.head applicablePlacements)
+    in
+    if maxValue == List.length applicablePlacements then
+        Invalid
+    else
+        Valid
+
+
+maximumPieceCount : Maybe Placement -> Int
+maximumPieceCount maybePlacement =
+    case maybePlacement of
+        Nothing ->
+            -1
+
+        Just placement ->
+            case placement.piece of
+                Monarch ->
+                    1
+
+                Hand ->
+                    1
+
+                Rook ->
+                    2
+
+                Bishop ->
+                    2
+
+                Knight ->
+                    2
+
+                Pawn ->
+                    8
 
 
 notEnoughPointsRemaining : Int -> State -> Validation

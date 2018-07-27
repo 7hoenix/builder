@@ -15,7 +15,7 @@ app.use(express.json());
 app.post("/api/lesson", (req, res, next) => {
   const fen = req.body.fen;
   const seed = req.body.seed;
-  if (!!fen || !!seed) {
+  if (!!fen && !!seed) {
     const id = lessons.length; // TODO: use UUID
     const newLesson = {
       id: id,
