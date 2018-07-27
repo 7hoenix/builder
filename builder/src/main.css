@@ -33,3 +33,7 @@ img {
 .container-one-third {
   flex: 1;
 }
+
+.hidden {
+  display: none;
+}

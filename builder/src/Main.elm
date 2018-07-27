@@ -567,8 +567,7 @@ view model =
                     [ h1 [] [ text <| "Level " ++ toString model.pointsAllowed ]
                     , makeSlider model
                     , viewKitty model
-                    , div [] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
-                    , div [] [ button [ onClick GetLesson, H.class "button is-info" ] [ text "Get Lesson" ] ]
+                    , viewActionMenu model
                     , viewCurrentGame model
                     ]
                 ]
@@ -578,7 +577,7 @@ view model =
 
 viewCurrentGame : Model -> Html Msg
 viewCurrentGame { currentGame } =
-    h2 []
+    h2 [ H.class "hidden" ]
         [ case currentGame of
             Nothing ->
                 text ""
@@ -689,6 +688,20 @@ kittyPieces =
 kittyPieceView : Piece -> Player -> Svg Msg
 kittyPieceView piece player =
     pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
+
+
+
+---- ACTIONMENU ----
+
+
+viewActionMenu : Model -> Html Msg
+viewActionMenu model =
+    div [ H.class "box" ]
+        [ div [ H.class "level" ]
+            [ div [ H.class "level-item" ] [ button [ onClick GetLesson, H.class "button is-primary" ] [ text "Generate" ] ]
+            , div [ H.class "level-item" ] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
+            ]
+        ]
 
 
 
