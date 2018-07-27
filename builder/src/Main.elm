@@ -44,6 +44,7 @@ type alias Placement =
 
 type alias Model =
     { currentGame : Maybe String
+    , initialSeed : Random.Seed
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
@@ -57,9 +58,14 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
+    let
+        initialSeed =
+            Random.initialSeed 12345
+    in
     ( generate
         { currentGame = Nothing
-        , currentSeed = Random.initialSeed 12345
+        , initialSeed = initialSeed
+        , currentSeed = initialSeed
         , placements = []
         , pointsAllowed = 1
         , chessModel = chessInit
@@ -92,7 +98,14 @@ update msg model =
             ( { model | currentGame = Just fen }, postLessonCmd model fen )
 
         HandleSliderChange pointsAllowed ->
-            ( generate { model | pointsAllowed = pointsAllowed, placements = [] }, Cmd.none )
+            ( generate
+                { model
+                    | currentSeed = Random.fastForward pointsAllowed model.initialSeed
+                    , pointsAllowed = pointsAllowed
+                    , placements = []
+                }
+            , Cmd.none
+            )
 
         GetSeed ->
             ( model, fetchSeedCmd )
@@ -139,7 +152,7 @@ fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
 fetchSeedCompleted model result =
     case Debug.log "fetch new seed result:" result of
         Ok seed ->
-            ( generate { model | currentSeed = Random.initialSeed seed, placements = [] }, Cmd.none )
+            ( generate { model | initialSeed = Random.initialSeed seed, placements = [] }, Cmd.none )
 
         Err _ ->
             ( model, Cmd.none )
