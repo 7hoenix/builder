@@ -51,6 +51,10 @@ type alias Model =
     }
 
 
+
+-- TODO: Pass in initialSeed as a port.
+
+
 init : ( Model, Cmd Msg )
 init =
     ( generate

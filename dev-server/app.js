@@ -11,9 +11,14 @@ app.use(express.json());
 
 app.post("/api/lesson", (req, res, next) => {
   const fen = req.body.fen;
-  if (!!fen) {
-    const id = lessons.length;
-    const newLesson = { id: id, lesson: fen };
+  const seed = req.body.seed;
+  if (!!fen || !!seed) {
+    const id = lessons.length; // TODO: use UUID
+    const newLesson = {
+      id: id,
+      seed: seed,
+      lesson: fen
+    };
     lessons.push(newLesson);
     res.status(204).send("No Content");
   } else {
@@ -26,8 +31,8 @@ app.get("/api/lesson/:id", (req, res, next) => {
   const lesson = lessons.find(lesson => lesson.id == id);
   if (lesson) {
     res.json({
-      msg: "lesson content",
-      data: { lesson: lesson.lesson }
+      msg: "Use this key as the initialSeed in your init function",
+      data: { previousSeed: lesson.seed }
     });
   } else {
     res.status(404).send("Not Found");
