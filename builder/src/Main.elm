@@ -61,7 +61,7 @@ init =
         { currentGame = Nothing
         , currentSeed = Random.initialSeed 12345
         , placements = []
-        , pointsAllowed = 22
+        , pointsAllowed = 1
         , chessModel = chessInit
         }
     , Cmd.none
@@ -76,8 +76,8 @@ type Msg
     = Validate
     | HandleGameUpdate String
     | HandleSliderChange Int
-    | GetLesson
-    | FetchLessonCompleted (Result Http.Error String)
+    | GetSeed
+    | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
     | ChessMsg ChessMsg
 
@@ -94,11 +94,11 @@ update msg model =
         HandleSliderChange pointsAllowed ->
             ( generate { model | pointsAllowed = pointsAllowed, placements = [] }, Cmd.none )
 
-        GetLesson ->
-            ( model, fetchLessonCmd )
+        GetSeed ->
+            ( model, fetchSeedCmd )
 
-        FetchLessonCompleted result ->
-            fetchLessonCompleted model result
+        FetchSeedCompleted result ->
+            fetchSeedCompleted model result
 
         PostLessonCompleted result ->
             postLessonCompleted model result
@@ -112,7 +112,7 @@ update msg model =
 
 
 
----- SUBMIT LESSON ----
+---- FETCH SEED ----
 
 
 api : String
@@ -120,26 +120,26 @@ api =
     "http://localhost:3001/"
 
 
-submitLessonUrl : String
-submitLessonUrl =
-    api ++ "api/lesson/0"
+getSeedUrl : String
+getSeedUrl =
+    api ++ "api/seed"
 
 
-fetchLesson : Http.Request String
-fetchLesson =
-    Http.getString submitLessonUrl
+fetchSeed : Http.Request Int
+fetchSeed =
+    Http.get getSeedUrl (D.at [ "seed" ] D.int)
 
 
-fetchLessonCmd : Cmd Msg
-fetchLessonCmd =
-    Http.send FetchLessonCompleted fetchLesson
+fetchSeedCmd : Cmd Msg
+fetchSeedCmd =
+    Http.send FetchSeedCompleted fetchSeed
 
 
-fetchLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
-fetchLessonCompleted model result =
-    case Debug.log "fetch result" result of
-        Ok newLesson ->
-            ( { model | currentGame = Just newLesson }, Cmd.none )
+fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
+fetchSeedCompleted model result =
+    case Debug.log "fetch new seed result:" result of
+        Ok seed ->
+            ( generate { model | currentSeed = Random.initialSeed seed, placements = [] }, Cmd.none )
 
         Err _ ->
             ( model, Cmd.none )
@@ -627,7 +627,7 @@ makeSlider model =
     input
         [ type_ "range"
         , H.min "1"
-        , H.max "22"
+        , H.max "10"
         , defaultValue <| toString model.pointsAllowed
         , on "input" (targetValue |> D.andThen parseInt)
         ]
@@ -698,7 +698,7 @@ viewActionMenu : Model -> Html Msg
 viewActionMenu model =
     div [ H.class "box" ]
         [ div [ H.class "level" ]
-            [ div [ H.class "level-item" ] [ button [ onClick GetLesson, H.class "button is-primary" ] [ text "Generate" ] ]
+            [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Generate" ] ]
             , div [ H.class "level-item" ] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
             ]
         ]

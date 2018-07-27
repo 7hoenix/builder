@@ -4,6 +4,9 @@ var cors = require("cors");
 var app = express();
 
 let lessons = [];
+let randomSeed = () => {
+  return Math.floor(Math.random() * 100);
+}
 
 app.use(cors()); // TODO: handle CORS better
 app.use(express.urlencoded({ extended: true }));
@@ -26,17 +29,8 @@ app.post("/api/lesson", (req, res, next) => {
   }
 });
 
-app.get("/api/lesson/:id", (req, res, next) => {
-  const id = req.params.id;
-  const lesson = lessons.find(lesson => lesson.id == id);
-  if (lesson) {
-    res.json({
-      msg: "Use this key as the initialSeed in your init function",
-      data: { previousSeed: lesson.seed }
-    });
-  } else {
-    res.status(404).send("Not Found");
-  }
+app.get("/api/seed", (req, res, next) => {
+  res.json({"seed": randomSeed()});
 });
 
 app.listen(3001, () => console.log("Listening"));
