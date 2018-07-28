@@ -1,12 +1,12 @@
-module Main exposing (..)
+module Builder exposing (..)
 
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
+import BuilderJs
 import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, getString, jsonBody)
-import Js
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
 import Json.Encode as E
@@ -260,7 +260,7 @@ buildSquaree placements rowIndex columnIndex =
 
 sendPlacements : List Placement -> Cmd msg
 sendPlacements placements =
-    Js.fromElm
+    BuilderJs.fromElm
         (E.object
             [ ( "tag", E.string "SEND_PLACEMENTS" )
             , ( "placements", pplacements placements )
@@ -625,17 +625,19 @@ view model =
     div []
         [ viewNavbar
         , section [ H.class "section" ]
-            [ div [ H.class "container columns" ]
-                [ div
-                    [ H.class "column is-three-quarters"
-                    ]
-                    [ Html.map ChessMsg (chessView model.chessModel) ]
-                , div [ H.class "column" ]
-                    [ h1 [] [ text <| "Level " ++ toString model.pointsAllowed ]
-                    , makeSlider model
-                    , viewKitty model
-                    , viewActionMenu model
-                    , viewCurrentGame model
+            [ div [ H.class "container" ]
+                [ div [ H.class "columns is-centered" ]
+                    [ div
+                        [ H.class "column is-narrow"
+                        ]
+                        [ Html.map ChessMsg (chessView model.chessModel) ]
+                    , div [ H.class "column is-one-third has-text-centered" ]
+                        [ h2 [ H.class "subtitle is-2" ] [ text <| "Level " ++ toString model.pointsAllowed ]
+                        , makeSlider model
+                        , viewKitty model
+                        , viewActionMenu model
+                        , viewCurrentGame model
+                        ]
                     ]
                 ]
             ]
@@ -644,7 +646,7 @@ view model =
 
 viewCurrentGame : Model -> Html Msg
 viewCurrentGame { currentGame } =
-    h2 [ H.class "hidden" ]
+    h2 [ H.class "is-hidden" ]
         [ case currentGame of
             Nothing ->
                 text ""
@@ -658,33 +660,35 @@ viewNavbar : Html Msg
 viewNavbar =
     nav
         [ H.class "navbar has-shadow is-spaced" ]
-        [ div [ H.class "navbar-brand" ]
-            [ a
-                [ H.class "navbar-item"
-                , H.href "https://github.com/7hoenix/procedural-gen"
-                , H.target "_blank"
-                ]
-                [ h1 [] [ text "Builder" ] ]
-            , div
-                [ H.class "navbar-burger, burger"
-                ]
-                [ span
-                    [ H.attribute "aria-hidden" "true"
+        [ div [ H.class "container" ]
+            [ div [ H.class "navbar-brand" ]
+                [ a
+                    [ H.class "navbar-item"
+                    , H.href "https://github.com/7hoenix/procedural-gen"
+                    , H.target "_blank"
                     ]
-                    []
-                , span
-                    [ H.attribute "aria-hidden" "true"
+                    [ h1 [ H.class "title" ] [ text "Builder" ] ]
+                , div
+                    [ H.class "navbar-burger, burger"
                     ]
-                    []
-                , span
-                    [ H.attribute "aria-hidden" "true"
+                    [ span
+                        [ H.attribute "aria-hidden" "true"
+                        ]
+                        []
+                    , span
+                        [ H.attribute "aria-hidden" "true"
+                        ]
+                        []
+                    , span
+                        [ H.attribute "aria-hidden" "true"
+                        ]
+                        []
                     ]
-                    []
                 ]
-            ]
-        , div [ H.class "navbar-menu" ]
-            [ div [ H.class "navbar-start" ] []
-            , div [ H.class "navbar-end" ] []
+            , div [ H.class "navbar-menu" ]
+                [ div [ H.class "navbar-start" ] []
+                , div [ H.class "navbar-end" ] []
+                ]
             ]
         ]
 
@@ -777,7 +781,7 @@ viewActionMenu model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Js.fromJs decodeFen
+    BuilderJs.fromJs decodeFen
 
 
 decodeFen : E.Value -> Msg
