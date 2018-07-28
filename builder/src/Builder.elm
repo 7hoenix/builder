@@ -626,12 +626,12 @@ view model =
         [ viewNavbar
         , section [ H.class "section" ]
             [ div [ H.class "container" ]
-                [ div [ H.class "columns is-centered" ]
+                [ div [ H.class "columns is-centered is-variable is-8" ]
                     [ div
                         [ H.class "column is-narrow"
                         ]
                         [ Html.map ChessMsg (chessView model.chessModel) ]
-                    , div [ H.class "column is-one-third has-text-centered" ]
+                    , div [ H.class "column is-narrow has-text-centered" ]
                         [ h2 [ H.class "subtitle is-2" ] [ text <| "Level " ++ toString model.pointsAllowed ]
                         , makeSlider model
                         , viewKitty model
@@ -767,7 +767,7 @@ kittyPieceView piece player =
 
 viewActionMenu : Model -> Html Msg
 viewActionMenu model =
-    div [ H.class "box" ]
+    div []
         [ div [ H.class "level" ]
             [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Generate" ] ]
             , div [ H.class "level-item" ] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
