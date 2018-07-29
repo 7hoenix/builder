@@ -130,7 +130,11 @@ update msg model =
 
 api : String
 api =
-    "http://localhost:3001/"
+    "https://young-meadow-51179.herokuapp.com/"
+
+
+
+-- "http://localhost:3001/"
 
 
 getSeedUrl : String
@@ -176,7 +180,7 @@ postLessonCmd model fen =
             jsonBody (E.object [ ( "fen", E.string fen ) ])
 
         request =
-            Http.post "http://localhost:3001/api/lesson" body (D.succeed "cake")
+            Http.post (api ++ "api/lesson") body (D.succeed "cake")
     in
     Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
 
