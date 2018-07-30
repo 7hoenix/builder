@@ -48,6 +48,7 @@ type alias Model =
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
+    , submitting : Bool
     , chessModel : ChessModel
     }
 
@@ -68,6 +69,7 @@ init =
         , currentSeed = initialSeed
         , placements = []
         , pointsAllowed = 1
+        , submitting = False
         , chessModel = chessInit
         }
     , Cmd.none
@@ -92,7 +94,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Validate ->
-            ( model, sendPlacements model.placements )
+            ( { model | submitting = True }, sendPlacements model.placements )
 
         HandleGameUpdate fen ->
             ( { model | currentGame = Just fen }, postLessonCmd model fen )
@@ -189,10 +191,10 @@ postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
 postLessonCompleted model result =
     case Debug.log "post result" result of
         Ok thing ->
-            ( model, Cmd.none )
+            ( { model | submitting = False }, Cmd.none )
 
         Err _ ->
-            ( model, Cmd.none )
+            ( { model | submitting = False }, Cmd.none )
 
 
 
@@ -774,9 +776,27 @@ viewActionMenu model =
     div []
         [ div [ H.class "level" ]
             [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Generate" ] ]
-            , div [ H.class "level-item" ] [ button [ onClick Validate, H.class "button is-info" ] [ text "Submit Lesson" ] ]
+            , div [ H.class "level-item" ]
+                [ button (loadingButtonAttributes (onClick Validate) "is-info" model.submitting)
+                    [ text "Submit Lesson" ]
+                ]
             ]
         ]
+
+
+loadingButtonAttributes clickHandler color isLoading =
+    let
+        displayLoading =
+            if Debug.log "loadingstate" isLoading then
+                "is-loading"
+            else
+                ""
+    in
+    [ clickHandler
+    , H.class "button"
+    , H.class color
+    , H.class displayLoading
+    ]
 
 
 
