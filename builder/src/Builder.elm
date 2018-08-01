@@ -3,7 +3,7 @@ module Builder exposing (..)
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
-import Html exposing (Html, a, button, div, h1, h2, img, input, nav, section, span)
+import Html exposing (Html, a, button, div, h1, h2, h3, img, input, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, getString, jsonBody)
@@ -132,11 +132,11 @@ update msg model =
 
 api : String
 api =
-    "https://young-meadow-51179.herokuapp.com/"
+    "http://localhost:3001/"
 
 
 
--- "http://localhost:3001/"
+-- "https://young-meadow-51179.herokuapp.com/"
 
 
 getSeedUrl : String
@@ -636,11 +636,14 @@ view model =
                     [ div
                         [ H.class "column is-narrow"
                         ]
-                        [ Html.map ChessMsg (chessView model.chessModel) ]
+                        [ h2 [ H.class "subtitle is-3" ] [ text <| "Level " ++ toString model.pointsAllowed ]
+                        , Html.map ChessMsg (chessView model.chessModel)
+                        ]
                     , div [ H.class "column is-narrow has-text-centered" ]
-                        [ h2 [ H.class "subtitle is-2" ] [ text <| "Level " ++ toString model.pointsAllowed ]
-                        , makeSlider model
+                        [ h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
                         , viewKitty model
+                        , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
+                        , makeSlider model
                         , viewActionMenu model
                         , viewCurrentGame model
                         ]
@@ -701,14 +704,18 @@ viewNavbar =
 
 makeSlider : Model -> Html Msg
 makeSlider model =
-    input
-        [ type_ "range"
-        , H.min "1"
-        , H.max "10"
-        , defaultValue <| toString model.pointsAllowed
-        , on "input" (targetValue |> D.andThen parseInt)
+    div []
+        [ text "1  "
+        , input
+            [ type_ "range"
+            , H.min "1"
+            , H.max "10"
+            , defaultValue <| toString model.pointsAllowed
+            , on "input" (targetValue |> D.andThen parseInt)
+            ]
+            []
+        , text "  10"
         ]
-        []
 
 
 parseInt : String -> D.Decoder Msg
@@ -775,7 +782,7 @@ viewActionMenu : Model -> Html Msg
 viewActionMenu model =
     div []
         [ div [ H.class "level" ]
-            [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Generate" ] ]
+            [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
             , div [ H.class "level-item" ]
                 [ button (loadingButtonAttributes (onClick Validate) "is-info" model.submitting)
                     [ text "Submit Lesson" ]
