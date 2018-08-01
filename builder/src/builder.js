@@ -1,7 +1,9 @@
 import { Builder } from "./Builder.elm";
 
-export function builder(chess) {
-  const app = Builder.embed(document.getElementById("root"));
+export function builder(chess, port) {
+  const app = Builder.embed(document.getElementById("root"), {
+    apiPort: port
+  });
 
   app.ports.fromElm.subscribe(msg => {
     switch (msg.tag) {

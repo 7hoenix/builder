@@ -4,4 +4,5 @@ import { builder } from "./builder.js";
 import registerServiceWorker from "./registerServiceWorker";
 
 const chess = new Chess();
-builder(chess);
+const port = 3001;
+builder(chess, port);

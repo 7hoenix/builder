@@ -43,7 +43,8 @@ type alias Placement =
 
 
 type alias Model =
-    { currentGame : Maybe String
+    { apiPort : Int
+    , currentGame : Maybe String
     , initialSeed : Random.Seed
     , currentSeed : Random.Seed
     , placements : List Placement
@@ -53,18 +54,19 @@ type alias Model =
     }
 
 
+type alias Flags =
+    { apiPort : Int }
 
--- TODO: Pass in initialSeed as a port.
 
-
-init : ( Model, Cmd Msg )
-init =
+init : Flags -> ( Model, Cmd Msg )
+init flags =
     let
         initialSeed =
             Random.initialSeed 12345
     in
     ( generate
-        { currentGame = Nothing
+        { apiPort = flags.apiPort
+        , currentGame = Nothing
         , initialSeed = initialSeed
         , currentSeed = initialSeed
         , placements = []
@@ -110,7 +112,7 @@ update msg model =
             )
 
         GetSeed ->
-            ( model, fetchSeedCmd )
+            ( model, fetchSeedCmd model.apiPort )
 
         FetchSeedCompleted result ->
             fetchSeedCompleted model result
@@ -130,28 +132,28 @@ update msg model =
 ---- FETCH SEED ----
 
 
-api : String
-api =
-    "http://localhost:3001/"
+api : Int -> String
+api apiPort =
+    "http://localhost:" ++ toString apiPort ++ "/"
 
 
 
 -- "https://young-meadow-51179.herokuapp.com/"
 
 
-getSeedUrl : String
-getSeedUrl =
-    api ++ "api/seed"
+getSeedUrl : Int -> String
+getSeedUrl apiPort =
+    api apiPort ++ "api/seed"
 
 
-fetchSeed : Http.Request Int
-fetchSeed =
-    Http.get getSeedUrl (D.at [ "seed" ] D.int)
+fetchSeed : Int -> Http.Request Int
+fetchSeed apiPort =
+    Http.get (getSeedUrl apiPort) (D.at [ "seed" ] D.int)
 
 
-fetchSeedCmd : Cmd Msg
-fetchSeedCmd =
-    Http.send FetchSeedCompleted fetchSeed
+fetchSeedCmd : Int -> Cmd Msg
+fetchSeedCmd apiPort =
+    Http.send FetchSeedCompleted (fetchSeed apiPort)
 
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
@@ -182,7 +184,7 @@ postLessonCmd model fen =
             jsonBody (E.object [ ( "fen", E.string fen ) ])
 
         request =
-            Http.post (api ++ "api/lesson") body (D.succeed "cake")
+            Http.post (api model.apiPort ++ "api/lesson") body (D.succeed "cake")
     in
     Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
 
@@ -833,9 +835,9 @@ decodeFen value =
 ---- PROGRAM ----
 
 
-main : Program Never Model Msg
+main : Program Flags Model Msg
 main =
-    Html.program
+    Html.programWithFlags
         { view = view
         , init = init
         , update = update
