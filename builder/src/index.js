@@ -5,4 +5,5 @@ import registerServiceWorker from "./registerServiceWorker";
 
 const chess = new Chess();
 const port = 3001;
-builder(chess, port);
+const initialSeed = 1;
+builder(chess, port, initialSeed);

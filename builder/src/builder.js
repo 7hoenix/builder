@@ -1,8 +1,9 @@
 import { Builder } from "./Builder.elm";
 
-export function builder(chess, port) {
+export function builder(chess, port, seed) {
   const app = Builder.embed(document.getElementById("root"), {
-    apiPort: port
+    apiPort: port,
+    initialSeed: seed
   });
 
   app.ports.fromElm.subscribe(msg => {

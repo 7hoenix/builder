@@ -55,14 +55,16 @@ type alias Model =
 
 
 type alias Flags =
-    { apiPort : Int }
+    { apiPort : Int
+    , initialSeed : Int
+    }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     let
         initialSeed =
-            Random.initialSeed 12345
+            Random.initialSeed flags.initialSeed
     in
     ( generate
         { apiPort = flags.apiPort
