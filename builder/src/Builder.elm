@@ -160,7 +160,7 @@ fetchSeedCmd apiPort =
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
 fetchSeedCompleted model result =
-    case Debug.log "fetch new seed result:" result of
+    case result of
         Ok seed ->
             let
                 nextSeed =
@@ -188,12 +188,12 @@ postLessonCmd model fen =
         request =
             Http.post (api model.apiPort ++ "api/lesson") body (D.succeed "cake")
     in
-    Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
+    Http.send PostLessonCompleted <| request
 
 
 postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
 postLessonCompleted model result =
-    case Debug.log "post result" result of
+    case result of
         Ok thing ->
             ( { model | submitting = False }, Cmd.none )
 
@@ -798,7 +798,7 @@ viewActionMenu model =
 loadingButtonAttributes clickHandler color isLoading =
     let
         displayLoading =
-            if Debug.log "loadingstate" isLoading then
+            if isLoading then
                 "is-loading"
             else
                 ""
@@ -917,7 +917,7 @@ type ChessMsg
 
 chessUpdate : ChessMsg -> ChessModel -> ( ChessModel, Cmd ChessMsg )
 chessUpdate msg model =
-    case Debug.log "Main.update" msg of
+    case msg of
         NoOp ->
             ( model, Cmd.none )
 
@@ -975,7 +975,7 @@ chessView model =
 boardView : Board -> Svg ChessMsg
 boardView board =
     g [ onMouseMove MouseMoved ]
-        (List.indexedMap rankView (Debug.log "board" board))
+        (List.indexedMap rankView board)
 
 
 onMouseMove : (MouseMove -> ChessMsg) -> Svg.Attribute ChessMsg
