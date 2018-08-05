@@ -3,7 +3,7 @@ module Builder exposing (..)
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
-import Html exposing (Html, a, button, div, h1, h2, h3, img, input, nav, section, span)
+import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, getString, jsonBody)
@@ -12,6 +12,7 @@ import Json.Decode.Pipeline as JDP
 import Json.Encode as E
 import List.Extra as List
 import Mouse
+import Navigation exposing (load, newUrl)
 import Piece
 import Random.Pcg as Random
 import Svg exposing (Svg, g, rect, svg, text, text_)
@@ -42,14 +43,21 @@ type alias Placement =
     }
 
 
+type SupportedMode
+    = Basic
+    | ForcingMoves
+
+
 type alias Model =
     { apiEndpoint : String
+    , mode : SupportedMode
     , currentGame : Maybe String
     , initialSeed : Random.Seed
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     , submitting : Bool
+    , alerts : List String
     , chessModel : ChessModel
     }
 
@@ -68,12 +76,14 @@ init flags =
     in
     ( generate
         { apiEndpoint = flags.apiEndpoint
+        , mode = Basic
         , currentGame = Nothing
         , initialSeed = initialSeed
         , currentSeed = initialSeed
         , placements = []
         , pointsAllowed = 1
         , submitting = False
+        , alerts = []
         , chessModel = chessInit
         }
     , Cmd.none
@@ -88,9 +98,11 @@ type Msg
     = Validate
     | HandleGameUpdate String
     | HandleSliderChange Int
+    | SelectMode SupportedMode
     | GetSeed
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
+    | TryLesson
     | ChessMsg ChessMsg
 
 
@@ -113,6 +125,14 @@ update msg model =
             , Cmd.none
             )
 
+        SelectMode mode ->
+            case mode of
+                ForcingMoves ->
+                    ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
+
+                _ ->
+                    ( { model | mode = mode, alerts = [] }, Cmd.none )
+
         GetSeed ->
             ( model, fetchSeedCmd model.apiEndpoint )
 
@@ -121,6 +141,9 @@ update msg model =
 
         PostLessonCompleted result ->
             postLessonCompleted model result
+
+        TryLesson ->
+            ( model, load "#/simulation" )
 
         ChessMsg chessMsg ->
             let
@@ -630,17 +653,25 @@ view : Model -> Html Msg
 view model =
     div []
         [ viewNavbar
+        , viewAlerts model
         , section [ H.class "section" ]
             [ div [ H.class "container" ]
                 [ div [ H.class "columns is-centered is-variable is-8" ]
                     [ div
                         [ H.class "column is-narrow"
                         ]
-                        [ h2 [ H.class "subtitle is-3" ] [ text <| "Level " ++ toString model.pointsAllowed ]
-                        , Html.map ChessMsg (chessView model.chessModel)
+                        [ Html.map ChessMsg (chessView model.chessModel)
+                        , section [ H.class "columns" ]
+                            [ div [ H.class "column is-two-thirds" ] []
+                            , div [ H.class "column is-one-third" ]
+                                [ h2 [ H.class "subtitle is-3" ] [ text <| "Level " ++ toString model.pointsAllowed ]
+                                ]
+                            ]
                         ]
                     , div [ H.class "column is-narrow has-text-centered" ]
-                        [ h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
+                        [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
+                        , viewModeSelection model
+                        , h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
                         , viewKitty model
                         , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
                         , makeSlider model
@@ -676,7 +707,8 @@ viewNavbar =
                     , H.href "https://github.com/7hoenix/procedural-gen"
                     , H.target "_blank"
                     ]
-                    [ h1 [ H.class "title" ] [ text "Builder" ] ]
+                    [ h1 [ H.class "title" ] [ text "Builder" ]
+                    ]
                 , div
                     [ H.class "navbar-burger, burger"
                     ]
@@ -695,10 +727,55 @@ viewNavbar =
                     ]
                 ]
             , div [ H.class "navbar-menu" ]
-                [ div [ H.class "navbar-start" ] []
+                [ div [ H.class "navbar-start" ]
+                    [ button [ H.class "button", onClick TryLesson ] [ text "Try it out" ]
+                    ]
                 , div [ H.class "navbar-end" ] []
                 ]
             ]
+        ]
+
+
+
+---- ALERTS ----
+
+
+viewAlerts : Model -> Html Msg
+viewAlerts model =
+    case List.head model.alerts of
+        Just alert ->
+            section [ H.class "section" ]
+                [ div
+                    [ H.class "columns is-centered is-variable is-8"
+                    ]
+                    [ text alert ]
+                ]
+
+        _ ->
+            div [] []
+
+
+
+---- MODESELECTION ----
+
+
+viewModeSelection : Model -> Html Msg
+viewModeSelection model =
+    let
+        isChecked =
+            \x -> model.mode == x
+    in
+    div [ H.class "box", H.class "control" ]
+        [ radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+        , radio (SelectMode ForcingMoves) " Forcing Moves" "mode" (isChecked ForcingMoves)
+        ]
+
+
+radio : msg -> String -> String -> Bool -> Html msg
+radio msg buttonText name isChecked =
+    label [ H.class "radio" ]
+        [ input [ type_ "radio", H.name name, onClick msg, H.checked isChecked ] []
+        , text buttonText
         ]
 
 
