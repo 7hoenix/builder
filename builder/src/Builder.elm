@@ -43,7 +43,7 @@ type alias Placement =
 
 
 type alias Model =
-    { apiPort : Int
+    { apiEndpoint : String
     , currentGame : Maybe String
     , initialSeed : Random.Seed
     , currentSeed : Random.Seed
@@ -55,7 +55,7 @@ type alias Model =
 
 
 type alias Flags =
-    { apiPort : Int
+    { apiEndpoint : String
     , initialSeed : Int
     }
 
@@ -67,7 +67,7 @@ init flags =
             Random.initialSeed flags.initialSeed
     in
     ( generate
-        { apiPort = flags.apiPort
+        { apiEndpoint = flags.apiEndpoint
         , currentGame = Nothing
         , initialSeed = initialSeed
         , currentSeed = initialSeed
@@ -114,7 +114,7 @@ update msg model =
             )
 
         GetSeed ->
-            ( model, fetchSeedCmd model.apiPort )
+            ( model, fetchSeedCmd model.apiEndpoint )
 
         FetchSeedCompleted result ->
             fetchSeedCompleted model result
@@ -134,28 +134,24 @@ update msg model =
 ---- FETCH SEED ----
 
 
-api : Int -> String
-api apiPort =
-    "http://localhost:" ++ toString apiPort ++ "/"
+api : String -> String
+api apiEndpoint =
+    apiEndpoint ++ "/"
 
 
-
--- "https://young-meadow-51179.herokuapp.com/"
-
-
-getSeedUrl : Int -> String
-getSeedUrl apiPort =
-    api apiPort ++ "api/seed"
+getSeedUrl : String -> String
+getSeedUrl apiEndpoint =
+    api apiEndpoint ++ "api/seed"
 
 
-fetchSeed : Int -> Http.Request Int
-fetchSeed apiPort =
-    Http.get (getSeedUrl apiPort) (D.at [ "seed" ] D.int)
+fetchSeed : String -> Http.Request Int
+fetchSeed apiEndpoint =
+    Http.get (getSeedUrl apiEndpoint) (D.at [ "seed" ] D.int)
 
 
-fetchSeedCmd : Int -> Cmd Msg
-fetchSeedCmd apiPort =
-    Http.send FetchSeedCompleted (fetchSeed apiPort)
+fetchSeedCmd : String -> Cmd Msg
+fetchSeedCmd apiEndpoint =
+    Http.send FetchSeedCompleted (fetchSeed apiEndpoint)
 
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
@@ -186,7 +182,7 @@ postLessonCmd model fen =
             jsonBody (E.object [ ( "fen", E.string fen ) ])
 
         request =
-            Http.post (api model.apiPort ++ "api/lesson") body (D.succeed "cake")
+            Http.post (api model.apiEndpoint ++ "api/lesson") body (D.succeed "cake")
     in
     Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
 
