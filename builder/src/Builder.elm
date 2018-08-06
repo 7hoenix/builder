@@ -12,9 +12,9 @@ import Json.Decode.Pipeline as JDP
 import Json.Encode as E
 import List.Extra as List
 import Mouse
-import Navigation exposing (load, newUrl)
 import Piece
 import Random.Pcg as Random
+import Route exposing (Route(Simulation), switchTo)
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
@@ -143,7 +143,7 @@ update msg model =
             postLessonCompleted model result
 
         TryLesson ->
-            ( model, load "#/simulation" )
+            ( model, switchTo Simulation )
 
         ChessMsg chessMsg ->
             let
