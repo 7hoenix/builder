@@ -1,5 +1,6 @@
 const express = require("express");
 var morgan = require('morgan');
+var cors = require("cors");
 
 var app = express();
 
@@ -10,6 +11,7 @@ let randomSeed = () => {
 
 app.use(morgan('dev'));
 
+app.use(cors()); // TODO: handle CORS better
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
