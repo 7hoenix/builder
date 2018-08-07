@@ -1,5 +1,5 @@
 const express = require("express");
-// var cors = require("cors");
+var cors = require("cors");
 
 var app = express();
 
@@ -8,7 +8,7 @@ let randomSeed = () => {
   return Math.floor(Math.random() * 100);
 }
 
-// app.use(cors()); // TODO: handle CORS better
+app.use(cors()); // TODO: handle CORS better
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
