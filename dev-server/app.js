@@ -11,7 +11,6 @@ let randomSeed = () => {
 
 app.use(morgan('dev'));
 
-app.use(cors()); // TODO: handle CORS better
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -32,7 +31,7 @@ app.post("/api/lesson", (req, res, next) => {
   }
 });
 
-app.get("/api/seed", (req, res, next) => {
+app.get("/api/seed", cors(), (req, res, next) => {
   res.json({"seed": randomSeed()});
 });
 
