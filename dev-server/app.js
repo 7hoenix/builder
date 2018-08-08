@@ -1,5 +1,4 @@
 const express = require("express");
-// var cors = require("cors");
 
 var app = express();
 
@@ -8,16 +7,14 @@ let randomSeed = () => {
   return Math.floor(Math.random() * 100);
 }
 
-// app.use(cors()); // TODO: handle CORS better
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 app.post("/api/lesson", (req, res, next) => {
-  console.log('We made it! ')
+  console.log('Posting lesson')
   const fen = req.body.fen;
   const seed = req.body.seed;
   if (!!fen) {
-  // if (!!fen && !!seed) {
     const id = lessons.length; // TODO: use UUID
     const newLesson = {
       id: id,
@@ -32,6 +29,7 @@ app.post("/api/lesson", (req, res, next) => {
 });
 
 app.get("/api/seed", (req, res, next) => {
+  console.log('getting new seed')
   res.json({"seed": randomSeed()});
 });
 
