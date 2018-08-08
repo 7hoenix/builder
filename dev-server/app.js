@@ -1,4 +1,5 @@
 const express = require("express");
+var morgan = require('morgan');
 
 var app = express();
 
@@ -7,11 +8,12 @@ let randomSeed = () => {
   return Math.floor(Math.random() * 100);
 }
 
+app.use(morgan('dev'));
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 app.post("/api/lesson", (req, res, next) => {
-  console.log('Posting lesson')
   const fen = req.body.fen;
   const seed = req.body.seed;
   if (!!fen) {
@@ -29,7 +31,6 @@ app.post("/api/lesson", (req, res, next) => {
 });
 
 app.get("/api/seed", (req, res, next) => {
-  console.log('getting new seed')
   res.json({"seed": randomSeed()});
 });
 
