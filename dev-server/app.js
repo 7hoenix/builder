@@ -14,7 +14,16 @@ app.use(morgan('dev'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-app.post("/api/lesson", (req, res, next) => {
+var corsOptions = {
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST'],
+  optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+}
+
+const configuredCors = cors(corsOptions)
+
+app.options("/api/lesson", configuredCors)
+app.post("/api/lesson", configuredCors, (req, res, next) => {
   const fen = req.body.fen;
   const seed = req.body.seed;
   if (!!fen) {
@@ -31,7 +40,7 @@ app.post("/api/lesson", (req, res, next) => {
   }
 });
 
-app.get("/api/seed", cors(), (req, res, next) => {
+app.get("/api/seed", configuredCors, (req, res, next) => {
   res.json({"seed": randomSeed()});
 });
 
