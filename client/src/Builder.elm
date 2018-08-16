@@ -3,13 +3,14 @@ module Builder exposing (..)
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
+import Dict exposing (empty)
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, onInput, targetValue)
 import Http exposing (Request, getString, jsonBody)
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
-import Json.Encode as E
+import Json.Encode as E exposing (string)
 import List.Extra as List
 import Mouse
 import Piece
@@ -1247,19 +1248,101 @@ indexToRank index =
 ---- LESSON SYSTEM ----
 
 
-type Lesson
-    = TabulaRosa
+type alias Frame =
+    { state : String
+    , defaultMessage : String
+    , contentMessage : String
+
+    -- , squareToMessage : Dict.fromList \
+    --     [ "square" Square (Maybe String)
+    }
+
+
+squares =
+    [ "a1"
+    , "a2"
+    , "a3"
+    , "a4"
+    , "a6"
+    , "a7"
+    , "a8"
+    , "b1"
+    , "b2"
+    , "b3"
+    , "b4"
+    , "b6"
+    , "b7"
+    , "c8"
+    , "c1"
+    , "c2"
+    , "c3"
+    , "c4"
+    , "c6"
+    , "c7"
+    , "c8"
+    , "d1"
+    , "d2"
+    , "d3"
+    , "d4"
+    , "d6"
+    , "d7"
+    , "d8"
+    , "e1"
+    , "e2"
+    , "e3"
+    , "e4"
+    , "e6"
+    , "e7"
+    , "e8"
+    , "f1"
+    , "f2"
+    , "f3"
+    , "f4"
+    , "f6"
+    , "f7"
+    , "f8"
+    , "g1"
+    , "g2"
+    , "g3"
+    , "g4"
+    , "g6"
+    , "g7"
+    , "g8"
+    , "h1"
+    , "h2"
+    , "h3"
+    , "h4"
+    , "h6"
+    , "h7"
+    , "h8"
+    ]
 
 
 type alias LessonModel =
-    { lesson : Lesson
+    { previousFrames : List Frame
+    , selectedFrame : Frame
+    , remainingFrames : List Frame
     }
+
+
+
+-- previousFrames needs to be reversed maybe.
 
 
 lessonInit : LessonModel
 lessonInit =
-    { lesson = TabulaRosa
+    { previousFrames = []
+    , selectedFrame = emptyFrame
+    , remainingFrames = []
     }
+
+
+emptyFrame : Frame
+emptyFrame =
+    Frame
+        ""
+        ""
+        ""
 
 
 
@@ -1269,29 +1352,96 @@ lessonInit =
 type LessonMsg
     = Default String
     | Content String
+    | NextFrame
+    | PreviousFrame
 
 
 lessonUpdate : LessonMsg -> LessonModel -> ( LessonModel, Cmd LessonMsg )
 lessonUpdate msg model =
     case Debug.log "Lesson.update" msg of
         Default default ->
-            ( model, Cmd.none )
+            ( updateDefault model default, Cmd.none )
 
         Content content ->
-            ( model, Cmd.none )
+            ( updateContent model content, Cmd.none )
+
+        NextFrame ->
+            ( nextFrame model, Cmd.none )
+
+        PreviousFrame ->
+            ( previousFrame model, Cmd.none )
+
+
+updateDefault : LessonModel -> String -> LessonModel
+updateDefault model default =
+    let
+        frame =
+            model.selectedFrame
+
+        updatedFrame =
+            { frame | defaultMessage = default }
+    in
+    { model | selectedFrame = updatedFrame }
+
+
+updateContent : LessonModel -> String -> LessonModel
+updateContent model content =
+    let
+        frame =
+            model.selectedFrame
+
+        updatedFrame =
+            { frame | contentMessage = content }
+    in
+    { model | selectedFrame = updatedFrame }
+
+
+nextFrame : LessonModel -> LessonModel
+nextFrame model =
+    let
+        ( previous, current, remaining ) =
+            case model.remainingFrames of
+                [] ->
+                    ( model.selectedFrame :: model.previousFrames, emptyFrame, [] )
+
+                frame :: remaining ->
+                    ( model.selectedFrame :: model.previousFrames, frame, remaining )
+    in
+    { model | previousFrames = previous, selectedFrame = current, remainingFrames = remaining }
+
+
+previousFrame : LessonModel -> LessonModel
+previousFrame model =
+    let
+        ( previous, current, remaining ) =
+            case model.previousFrames of
+                frame :: previous ->
+                    ( previous, frame, model.selectedFrame :: model.remainingFrames )
+
+                [] ->
+                    ( model.previousFrames, model.selectedFrame, model.remainingFrames )
+    in
+    { model | previousFrames = previous, selectedFrame = current, remainingFrames = remaining }
 
 
 
----- LESSONVIEW ----
+--- LESSONVIEW ----
+-- Disable back button if not applicable.
 
 
 lessonView : LessonModel -> Html LessonMsg
 lessonView model =
     div []
         [ h3 [ H.class "subtitle is-5" ] [ text "Lesson" ]
+        , div [] [ input [ H.class "input", type_ "text", H.placeholder "Default", H.value model.selectedFrame.defaultMessage, onInput Default ] [] ]
+        , div [] [ input [ H.class "input", type_ "text", H.placeholder "Lesson", H.value model.selectedFrame.contentMessage, onInput Content ] [] ]
         , div []
-            [ input [ type_ "text", H.placeholder "When you march a pawn to the end you may promote it", onInput Content ] []
-            , input [ type_ "text", H.placeholder "Try clicking a green square", onInput Default ] []
+            [ span [ H.class "button", H.property "innerHTML" (string "&#60;"), onClick PreviousFrame ] []
+            , span [ H.class "button", H.property "innerHTML" (string "&#62;"), onClick NextFrame ] []
             ]
-        , div [] [ text "U+02190" ]
         ]
+
+
+
+-- , div [] [ input [ H.class "input", type_ "text", H.defaultValue "When you march a pawn to the end you may promote it", H.placeholder "Hint", onInput Content ] [] ]
+-- , div [] [ input [ H.class "input", type_ "text", H.defaultValue "Try clicking a green square", H.placeholder "Lesson", onInput Default ] [] ]
