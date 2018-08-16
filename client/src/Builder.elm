@@ -5,7 +5,7 @@ import Arithmetic exposing (isEven)
 import BuilderJs
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
-import Html.Events exposing (on, onClick, targetValue)
+import Html.Events exposing (on, onClick, onInput, targetValue)
 import Http exposing (Request, getString, jsonBody)
 import Json.Decode as D
 import Json.Decode.Pipeline as JDP
@@ -57,6 +57,7 @@ type alias Model =
     , pointsAllowed : Int
     , submitting : Bool
     , alerts : List String
+    , lessonModel : LessonModel
     , chessModel : ChessModel
     }
 
@@ -83,6 +84,7 @@ init flags =
         , pointsAllowed = 1
         , submitting = False
         , alerts = []
+        , lessonModel = lessonInit
         , chessModel = chessInit
         }
     , Cmd.none
@@ -101,6 +103,7 @@ type Msg
     | GetSeed
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
+    | LessonMsg LessonMsg
     | ChessMsg ChessMsg
 
 
@@ -139,6 +142,13 @@ update msg model =
 
         PostLessonCompleted result ->
             postLessonCompleted model result
+
+        LessonMsg lessonMsg ->
+            let
+                ( updatedLessonModel, lessonCmd ) =
+                    lessonUpdate lessonMsg model.lessonModel
+            in
+            ( { model | lessonModel = updatedLessonModel }, Cmd.map LessonMsg lessonCmd )
 
         ChessMsg chessMsg ->
             let
@@ -664,11 +674,10 @@ view model =
                             ]
                         ]
                     , div [ H.class "column is-narrow has-text-centered" ]
-                        [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
-                        , viewModeSelection model
-                        , h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
+                        [ -- , viewModeSelection model
+                          Html.map LessonMsg (lessonView model.lessonModel)
                         , viewKitty model
-                        , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
+                        , h3 [ H.class "subtitle is-5" ] [ text "Material" ]
                         , makeSlider model
                         , viewActionMenu model
                         , viewCurrentGame model
@@ -807,7 +816,9 @@ parseInt rawString =
 viewKitty : Model -> Html Msg
 viewKitty model =
     div [ H.class "box" ]
-        (List.map (\team -> viewKittyTeam model team) [ White, Black ])
+        ([ h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ] ]
+            ++ List.map (\team -> viewKittyTeam model team) [ White, Black ]
+        )
 
 
 viewKittyTeam : Model -> Player -> Html Msg
@@ -1230,3 +1241,57 @@ indexToRank index =
     [ "a", "b", "c", "d", "e", "f", "g", "h" ]
         |> List.getAt index
         |> Maybe.withDefault ""
+
+
+
+---- LESSON SYSTEM ----
+
+
+type Lesson
+    = TabulaRosa
+
+
+type alias LessonModel =
+    { lesson : Lesson
+    }
+
+
+lessonInit : LessonModel
+lessonInit =
+    { lesson = TabulaRosa
+    }
+
+
+
+---- LESSONUPDATE ----
+
+
+type LessonMsg
+    = Default String
+    | Content String
+
+
+lessonUpdate : LessonMsg -> LessonModel -> ( LessonModel, Cmd LessonMsg )
+lessonUpdate msg model =
+    case Debug.log "Lesson.update" msg of
+        Default default ->
+            ( model, Cmd.none )
+
+        Content content ->
+            ( model, Cmd.none )
+
+
+
+---- LESSONVIEW ----
+
+
+lessonView : LessonModel -> Html LessonMsg
+lessonView model =
+    div []
+        [ h3 [ H.class "subtitle is-5" ] [ text "Lesson" ]
+        , div []
+            [ input [ type_ "text", H.placeholder "When you march a pawn to the end you may promote it", onInput Content ] []
+            , input [ type_ "text", H.placeholder "Try clicking a green square", onInput Default ] []
+            ]
+        , div [] [ text "U+02190" ]
+        ]
