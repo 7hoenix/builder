@@ -232,9 +232,8 @@ postLessonCmd { lessonModel, apiEndpoint } =
         body =
             jsonBody
                 (E.object
-                    [ ( "lesson"
-                      , E.object
-                            [ ( "fen", E.string lessonModel.selectedFrame.state ) ]
+                    [ ( "frames"
+                      , frames lessonModel
                       )
                     ]
                 )
@@ -243,6 +242,24 @@ postLessonCmd { lessonModel, apiEndpoint } =
             Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
     in
     Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
+
+
+frames : LessonModel -> E.Value
+frames model =
+    let
+        allFrames =
+            List.concat [ List.reverse model.previousFrames, [ model.selectedFrame ], model.remainingFrames ]
+    in
+    E.list (List.map (\f -> frame f) allFrames)
+
+
+frame : Frame -> E.Value
+frame frame =
+    E.object
+        [ ( "state", E.string frame.state )
+        , ( "defaultMessage", E.string frame.defaultMessage )
+        , ( "contentMessage", E.string frame.contentMessage )
+        ]
 
 
 postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
