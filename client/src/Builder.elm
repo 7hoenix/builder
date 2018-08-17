@@ -1,9 +1,11 @@
 module Builder exposing (..)
 
+-- import Dict exposing (empty)
+-- import Route exposing (Route(Simulation), switchTo)
+
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
-import Dict exposing (empty)
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, onInput, targetValue)
@@ -75,7 +77,7 @@ init flags =
         initialSeed =
             Random.initialSeed flags.initialSeed
     in
-    ( generate
+    generate
         { apiEndpoint = flags.apiEndpoint
         , mode = Basic
         , currentGame = Nothing
@@ -88,8 +90,6 @@ init flags =
         , lessonModel = lessonInit
         , chessModel = chessInit
         }
-    , Cmd.none
-    )
 
 
 
@@ -98,6 +98,7 @@ init flags =
 
 type Msg
     = Validate
+    | PostLesson
     | HandleGameUpdate String
     | HandleSliderChange Int
     | SelectMode SupportedMode
@@ -105,6 +106,7 @@ type Msg
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
     | LessonMsg LessonMsg
+      -- | TryLesson
     | ChessMsg ChessMsg
 
 
@@ -114,18 +116,35 @@ update msg model =
         Validate ->
             ( { model | submitting = True }, sendPlacements model.placements )
 
+        PostLesson ->
+            ( { model | submitting = True }, postLessonCmd model )
+
         HandleGameUpdate fen ->
-            ( { model | currentGame = Just fen }, postLessonCmd model fen )
+            let
+                lessonModel =
+                    model.lessonModel
+
+                selectedFrame =
+                    lessonModel.selectedFrame
+
+                updatedFrame =
+                    { selectedFrame | state = fen }
+
+                updatedLessonModel =
+                    { lessonModel | selectedFrame = updatedFrame }
+
+                updatedModel =
+                    { model | currentGame = Just fen, lessonModel = updatedLessonModel }
+            in
+            ( updatedModel, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
-            ( generate
+            generate
                 { model
                     | currentSeed = Random.fastForward pointsAllowed model.initialSeed
                     , pointsAllowed = pointsAllowed
                     , placements = []
                 }
-            , Cmd.none
-            )
 
         SelectMode mode ->
             case mode of
@@ -151,12 +170,17 @@ update msg model =
             in
             ( { model | lessonModel = updatedLessonModel }, Cmd.map LessonMsg lessonCmd )
 
+        -- TryLesson ->
+        --     ( model, switchTo Simulation )
         ChessMsg chessMsg ->
             let
                 ( updatedChessModel, chessCmd ) =
                     chessUpdate chessMsg model.chessModel
+
+                updatedModel =
+                    mapToPlacements { model | chessModel = updatedChessModel }
             in
-            ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+            ( updatedModel, Cmd.batch [ sendPlacements updatedModel.placements, Cmd.map ChessMsg chessCmd ] )
 
 
 
@@ -191,27 +215,32 @@ fetchSeedCompleted model result =
                 nextSeed =
                     Random.initialSeed seed
             in
-            ( generate
+            generate
                 { model
                     | initialSeed = nextSeed
                     , currentSeed = Random.fastForward model.pointsAllowed nextSeed
                     , placements = []
                 }
-            , Cmd.none
-            )
 
         Err _ ->
             ( model, Cmd.none )
 
 
-postLessonCmd : Model -> String -> Cmd Msg
-postLessonCmd model fen =
+postLessonCmd : Model -> Cmd Msg
+postLessonCmd { lessonModel, apiEndpoint } =
     let
         body =
-            jsonBody (E.object [ ( "fen", E.string fen ) ])
+            jsonBody
+                (E.object
+                    [ ( "lesson"
+                      , E.object
+                            [ ( "fen", E.string lessonModel.selectedFrame.state ) ]
+                      )
+                    ]
+                )
 
         request =
-            Http.post (api model.apiEndpoint ++ "api/lesson") body (D.succeed "cake")
+            Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
     in
     Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
 
@@ -384,7 +413,7 @@ team team =
             E.string "w"
 
 
-generate : Model -> Model
+generate : Model -> ( Model, Cmd Msg )
 generate model =
     let
         hasBothMonarchs =
@@ -394,7 +423,7 @@ generate model =
             currentTotal model.placements == model.pointsAllowed
     in
     if hasBothMonarchs && atMaxScore then
-        mapToBoard model
+        ( mapToBoard model, sendPlacements model.placements )
     else
         generate <| generatePlacement model
 
@@ -868,7 +897,7 @@ viewActionMenu model =
         [ div [ H.class "level" ]
             [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
             , div [ H.class "level-item" ]
-                [ button (loadingButtonAttributes (onClick Validate) "is-info" model.submitting)
+                [ button (loadingButtonAttributes (onClick PostLesson) "is-info" model.submitting)
                     [ text "Submit Lesson" ]
                 ]
             ]
@@ -878,7 +907,7 @@ viewActionMenu model =
 loadingButtonAttributes clickHandler color isLoading =
     let
         displayLoading =
-            if Debug.log "loadingstate" isLoading then
+            if isLoading then
                 "is-loading"
             else
                 ""
@@ -997,7 +1026,7 @@ type ChessMsg
 
 chessUpdate : ChessMsg -> ChessModel -> ( ChessModel, Cmd ChessMsg )
 chessUpdate msg model =
-    case Debug.log "Main.update" msg of
+    case msg of
         NoOp ->
             ( model, Cmd.none )
 
@@ -1055,7 +1084,7 @@ chessView model =
 boardView : Board -> Svg ChessMsg
 boardView board =
     g [ onMouseMove MouseMoved ]
-        (List.indexedMap rankView (Debug.log "board" board))
+        (List.indexedMap rankView board)
 
 
 onMouseMove : (MouseMove -> ChessMsg) -> Svg.Attribute ChessMsg
@@ -1433,6 +1462,7 @@ lessonView : LessonModel -> Html LessonMsg
 lessonView model =
     div []
         [ h3 [ H.class "subtitle is-5" ] [ text "Lesson" ]
+        , div [] [ text (toString model.selectedFrame) ]
         , div [] [ input [ H.class "input", type_ "text", H.placeholder "Default", H.value model.selectedFrame.defaultMessage, onInput Default ] [] ]
         , div [] [ input [ H.class "input", type_ "text", H.placeholder "Lesson", H.value model.selectedFrame.contentMessage, onInput Content ] [] ]
         , div []
