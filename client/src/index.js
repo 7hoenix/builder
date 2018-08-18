@@ -4,6 +4,9 @@ import { builder } from "./builder.js";
 import registerServiceWorker from "./registerServiceWorker";
 
 const chess = new Chess();
-const endpoint = "http://localhost:3001";
+const endpoint = process.env.ELM_APP_API_ENDPOINT;
+const apiEndpoint = endpoint
+  ? endpoint
+  : "https://young-meadow-51179.herokuapp.com";
 const initialSeed = 1;
-builder(chess, endpoint, initialSeed);
+builder(chess, apiEndpoint, initialSeed);
