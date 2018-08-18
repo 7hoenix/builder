@@ -14,7 +14,6 @@ import List.Extra as List
 import Mouse
 import Piece
 import Random.Pcg as Random
-import Route exposing (Route(Simulation), switchTo)
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
@@ -102,7 +101,6 @@ type Msg
     | GetSeed
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
-    | TryLesson
     | ChessMsg ChessMsg
 
 
@@ -141,9 +139,6 @@ update msg model =
 
         PostLessonCompleted result ->
             postLessonCompleted model result
-
-        TryLesson ->
-            ( model, switchTo Simulation )
 
         ChessMsg chessMsg ->
             let
@@ -728,7 +723,7 @@ viewNavbar =
                 ]
             , div [ H.class "navbar-menu" ]
                 [ div [ H.class "navbar-start" ]
-                    [ button [ H.class "button", onClick TryLesson ] [ text "Try it out" ]
+                    [ a [ H.class "button", href "http://beta.chesstrained.com/#/simulation" ] [ text "Try it out" ]
                     ]
                 , div [ H.class "navbar-end" ] []
                 ]

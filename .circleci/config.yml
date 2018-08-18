@@ -1,0 +1,20 @@
+version: 2
+
+jobs:
+  build-client:
+    machine:
+        enabled: true
+    steps:
+      - checkout
+      - run: cd client && npm install
+      - run: cd client && npm run build
+      - run: cd client && aws s3 sync build s3://builder.chesstrained.com/ --delete
+
+workflows:
+  version: 2
+  build-deploy-client:
+    jobs:
+      - build-client:
+          filters:
+            branches:
+              only: master
