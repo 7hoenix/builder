@@ -1,11 +1,10 @@
 module Builder exposing (..)
 
--- import Dict exposing (empty)
--- import Route exposing (Route(Simulation), switchTo)
-
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
+import Char
+import Dict exposing (Dict)
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, onInput, targetValue)
@@ -97,8 +96,7 @@ init flags =
 
 
 type Msg
-    = Validate
-    | PostLesson
+    = PostLesson
     | HandleGameUpdate String
     | HandleSliderChange Int
     | SelectMode SupportedMode
@@ -106,37 +104,17 @@ type Msg
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
     | LessonMsg LessonMsg
-      -- | TryLesson
     | ChessMsg ChessMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Validate ->
-            ( { model | submitting = True }, sendPlacements model.placements )
-
         PostLesson ->
             ( { model | submitting = True }, postLessonCmd model )
 
         HandleGameUpdate fen ->
-            let
-                lessonModel =
-                    model.lessonModel
-
-                selectedFrame =
-                    lessonModel.selectedFrame
-
-                updatedFrame =
-                    { selectedFrame | state = fen }
-
-                updatedLessonModel =
-                    { lessonModel | selectedFrame = updatedFrame }
-
-                updatedModel =
-                    { model | currentGame = Just fen, lessonModel = updatedLessonModel }
-            in
-            ( updatedModel, Cmd.none )
+            ( setFenOnCurrentFrame model fen, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
             generate
@@ -168,10 +146,8 @@ update msg model =
                 ( updatedLessonModel, lessonCmd ) =
                     lessonUpdate lessonMsg model.lessonModel
             in
-            ( { model | lessonModel = updatedLessonModel }, Cmd.map LessonMsg lessonCmd )
+            ( mapToFen { model | lessonModel = updatedLessonModel }, Cmd.map LessonMsg lessonCmd )
 
-        -- TryLesson ->
-        --     ( model, switchTo Simulation )
         ChessMsg chessMsg ->
             let
                 ( updatedChessModel, chessCmd ) =
@@ -181,6 +157,134 @@ update msg model =
                     mapToPlacements { model | chessModel = updatedChessModel }
             in
             ( updatedModel, Cmd.batch [ sendPlacements updatedModel.placements, Cmd.map ChessMsg chessCmd ] )
+
+
+setFenOnCurrentFrame : Model -> String -> Model
+setFenOnCurrentFrame model fen =
+    let
+        lessonModel =
+            model.lessonModel
+
+        selectedFrame =
+            lessonModel.selectedFrame
+
+        updatedFrame =
+            { selectedFrame | state = fen }
+
+        updatedLessonModel =
+            { lessonModel | selectedFrame = updatedFrame }
+    in
+    { model | currentGame = Just fen, lessonModel = updatedLessonModel }
+
+
+mapToFen : Model -> Model
+mapToFen =
+    mapToBoard << parseCurrentFrameToFen
+
+
+parseCurrentFrameToFen : Model -> Model
+parseCurrentFrameToFen ({ lessonModel } as model) =
+    let
+        state =
+            lessonModel.selectedFrame.state
+
+        placements =
+            parseToPlacements state
+    in
+    { model | placements = placements }
+
+
+parseToPlacements : String -> List Placement
+parseToPlacements fen =
+    let
+        maybeFen =
+            List.head (String.split " " fen)
+
+        placements =
+            case maybeFen of
+                Nothing ->
+                    []
+
+                Just fen ->
+                    parseFenToPlacements fen
+    in
+    placements
+
+
+parseFenToPlacements : String -> List Placement
+parseFenToPlacements board =
+    let
+        rows =
+            String.split "/" board
+
+        placements =
+            List.concat <| List.indexedMap parseFenRowToPlacements rows
+    in
+    placements
+
+
+parseFenRowToPlacements : Int -> String -> List Placement
+parseFenRowToPlacements columnIndex row =
+    String.toList row
+        |> List.foldr (parseFenRowHelp columnIndex) ( [], 0 )
+        |> Tuple.first
+
+
+parseFenRowHelp : Int -> Char -> ( List Placement, Int ) -> ( List Placement, Int )
+parseFenRowHelp columnIndex square ( placementsSoFar, currentIndex ) =
+    let
+        ( maybeNextPlacement, offset ) =
+            parseSquare square
+    in
+    case maybeNextPlacement of
+        Nothing ->
+            ( placementsSoFar, currentIndex + offset )
+
+        Just ( piece, player ) ->
+            ( Placement { x = 8 - currentIndex, y = columnIndex + 1 }
+                piece
+                player
+                :: placementsSoFar
+            , currentIndex + offset
+            )
+
+
+parseSquare : Char -> ( Maybe ( Piece, Player ), Int )
+parseSquare char =
+    case Char.isDigit char of
+        True ->
+            ( Nothing, parseDigit char )
+
+        False ->
+            case Dict.get char allPieces of
+                Nothing ->
+                    ( Nothing, 0 )
+
+                Just ( piece, player ) ->
+                    ( Just ( piece, player ), 1 )
+
+
+allPieces : Dict Char ( Piece, Player )
+allPieces =
+    Dict.fromList
+        [ ( 'P', ( Pawn, White ) )
+        , ( 'R', ( Rook, White ) )
+        , ( 'N', ( Knight, White ) )
+        , ( 'B', ( Bishop, White ) )
+        , ( 'Q', ( Hand, White ) )
+        , ( 'K', ( Monarch, White ) )
+        , ( 'p', ( Pawn, Black ) )
+        , ( 'r', ( Rook, Black ) )
+        , ( 'n', ( Knight, Black ) )
+        , ( 'b', ( Bishop, Black ) )
+        , ( 'q', ( Hand, Black ) )
+        , ( 'k', ( Monarch, Black ) )
+        ]
+
+
+parseDigit : Char -> Int
+parseDigit c =
+    Char.toCode c - 48
 
 
 
@@ -710,7 +814,7 @@ view model =
             [ div [ H.class "container" ]
                 [ div [ H.class "columns is-centered is-variable is-8" ]
                     [ div
-                        [ H.class "column is-narrow"
+                        [ H.class "column is-half"
                         ]
                         [ Html.map ChessMsg (chessView model.chessModel)
                         , section [ H.class "columns" ]
@@ -720,7 +824,7 @@ view model =
                                 ]
                             ]
                         ]
-                    , div [ H.class "column is-narrow has-text-centered" ]
+                    , div [ H.class "column is-half has-text-centered" ]
                         [ -- , viewModeSelection model
                           Html.map LessonMsg (lessonView model.lessonModel)
                         , viewKitty model
