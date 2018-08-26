@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 16.0.4, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="45px"
+	 height="61.999px" viewBox="0 0 45 61.999" enable-background="new 0 0 45 61.999" xml:space="preserve">
+<g id="Layer_1_1_">
+</g>
+<g id="Original" display="none">
+</g>
+<g id="Red">
+</g>
+<g id="Green">
+</g>
+<g id="Black">
+	<path fill="#666666" d="M30.326,29.549c0-5.601,2.146-10.705,5.669-14.549H38.5V0h-4.485v3.327H27.42V0h-9.841v3.327h-6.595V0H6.5
+		v15h2.505c3.522,3.844,5.669,8.948,5.669,14.549c0,9.467-6.133,17.509-14.674,20.45v12h45v-12
+		C36.459,47.058,30.326,39.016,30.326,29.549z"/>
+	<g opacity="0.8">
+		<polygon opacity="0.01" points="17.579,0 17.579,3.327 10.984,3.327 10.984,0 6.5,0 6.5,15 22.5,15 22.5,0 		"/>
+		<polygon opacity="0.5" points="38.5,0 34.015,0 34.015,3.327 27.42,3.327 27.42,0 22.5,0 22.5,15 38.5,15 		"/>
+		<path opacity="0.3" d="M9.005,15c3.522,3.844,5.669,8.948,5.669,14.549c0,9.467-6.133,17.509-14.674,20.45h22.5V15H9.005z"/>
+		<path d="M30.326,29.549c0-5.601,2.146-10.705,5.669-14.549H22.5v34.999H45C36.459,47.058,30.326,39.016,30.326,29.549z"/>
+		<rect y="49.999" opacity="0.01" width="22.5" height="12"/>
+		<rect x="22.5" y="49.999" opacity="0.4" width="22.5" height="12"/>
+	</g>
+</g>
+<g id="BlackX" display="none">
+</g>
+<g id="White">
+</g>
+</svg>
