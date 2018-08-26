@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 16.0.4, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="40px"
+	 height="54.992px" viewBox="0 0 40 54.992" enable-background="new 0 0 40 54.992" xml:space="preserve">
+<g id="Layer_1_1_">
+</g>
+<g id="Original" display="none">
+</g>
+<g id="Red">
+</g>
+<g id="Green">
+</g>
+<g id="Black">
+	<path fill="#666666" d="M26.155,29.999c0-3.428,1.245-6.565,3.309-8.999H32v-8h-6.913c1.48-1.37,2.413-3.324,2.413-5.5
+		C27.5,3.357,24.143,0,20,0s-7.5,3.357-7.5,7.5c0,2.176,0.933,4.13,2.413,5.5H8v8h2.535c2.064,2.434,3.309,5.571,3.309,8.999
+		c0,7.639-6.173,13.844-13.844,13.993v11h40v-11C32.328,43.843,26.155,37.638,26.155,29.999z"/>
+	<g opacity="0.8">
+		<rect x="8" y="13" opacity="0.01" width="12" height="8"/>
+		<rect x="20" y="13" opacity="0.5" width="12" height="8"/>
+		<path d="M26.155,29.999c0-3.428,1.245-6.565,3.309-8.999H20v22.992h20C32.328,43.843,26.155,37.638,26.155,29.999z"/>
+		<path opacity="0.3" d="M10.535,21c2.064,2.434,3.309,5.571,3.309,8.999c0,7.639-6.173,13.844-13.844,13.993h20V21H10.535z"/>
+		<rect x="20" y="43.992" opacity="0.4" width="20" height="11"/>
+		<rect y="43.992" opacity="0.01" width="20" height="11"/>
+		<path opacity="0.01" d="M12.5,7.5c0,2.176,0.933,4.13,2.413,5.5H20V0C15.857,0,12.5,3.357,12.5,7.5z"/>
+		<path opacity="0.4" d="M27.5,7.5C27.5,3.357,24.143,0,20,0v13h5.087C26.567,11.63,27.5,9.676,27.5,7.5z"/>
+	</g>
+</g>
+<g id="BlackX" display="none">
+</g>
+<g id="White">
+</g>
+</svg>
