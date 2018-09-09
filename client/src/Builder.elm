@@ -1,8 +1,15 @@
-module Builder exposing (..)
+module Builder exposing (Flags, Model, Msg(..), Piece(..), Placement, SquareLocation, State, SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, fetchSeed, fetchSeedCmd, fetchSeedCompleted, findPointValueFromPiece, generate, generatePlacement, getSeedUrl, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, update, view, viewActionMenu, viewAlerts, viewCurrentGame, viewModeSelection, viewNavbar)
 
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
+import Chess exposing (Msg, State, fromFen, subscriptions, update, view)
+import Chess.Data.Board exposing (Square(..))
+import Chess.Data.Piece exposing (Piece(..))
+import Chess.Data.Player exposing (Player(..))
+import Chess.Data.Position exposing (Position)
+import Chess.View.Board
+import Drag
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
@@ -17,6 +24,7 @@ import Random.Pcg as Random
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
+
 
 
 ---- MODEL ----
@@ -50,14 +58,14 @@ type SupportedMode
 type alias Model =
     { apiEndpoint : String
     , mode : SupportedMode
-    , currentGame : Maybe String
+    , currentGame : String
     , initialSeed : Random.Seed
     , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     , submitting : Bool
     , alerts : List String
-    , chessModel : ChessModel
+    , chessModel : Chess.State
     }
 
 
@@ -72,21 +80,43 @@ init flags =
     let
         initialSeed =
             Random.initialSeed flags.initialSeed
+
+        initialPlacements =
+            generate [] 1 initialSeed
+
+        blankGameFen =
+            "8/8/8/8/8/8/8/8 w - - 0 0"
+
+        initialChessState =
+            case Chess.fromFen blankGameFen of
+                Nothing ->
+                    Debug.crash "FEN PARSER IS BROKEN PANIC"
+
+                Just state ->
+                    state
     in
-    ( generate
-        { apiEndpoint = flags.apiEndpoint
-        , mode = Basic
-        , currentGame = Nothing
-        , initialSeed = initialSeed
-        , currentSeed = initialSeed
-        , placements = []
-        , pointsAllowed = 1
-        , submitting = False
-        , alerts = []
-        , chessModel = chessInit
-        }
-    , Cmd.none
+    ( { apiEndpoint = flags.apiEndpoint
+      , mode = Basic
+      , currentGame = blankGameFen
+      , initialSeed = initialSeed
+      , currentSeed = initialSeed
+      , placements = initialPlacements
+      , pointsAllowed = 1
+      , submitting = False
+      , alerts = []
+      , chessModel = initialChessState
+      }
+    , sendPlacements initialPlacements
     )
+
+
+
+-- TODO: MAKE DYNAMIC LATER
+
+
+findConfig : Chess.View.Board.Config
+findConfig =
+    { each = "5em", between = "0.15em", borderSize = "0.3em" }
 
 
 
@@ -98,29 +128,41 @@ type Msg
     | HandleGameUpdate String
     | HandleSliderChange Int
     | SelectMode SupportedMode
+    | SubmitLesson
     | GetSeed
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
-    | ChessMsg ChessMsg
+    | ChessMsg Chess.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Validate ->
-            ( { model | submitting = True }, sendPlacements model.placements )
+            ( model, sendPlacements model.placements )
 
         HandleGameUpdate fen ->
-            ( { model | currentGame = Just fen }, postLessonCmd model fen )
+            let
+                updatedState =
+                    case Chess.fromFen fen of
+                        Nothing ->
+                            Debug.crash "BAD FEN"
+
+                        Just s ->
+                            s
+            in
+            ( { model | currentGame = fen, chessModel = updatedState }, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
-            ( generate
-                { model
-                    | currentSeed = Random.fastForward pointsAllowed model.initialSeed
-                    , pointsAllowed = pointsAllowed
-                    , placements = []
-                }
-            , Cmd.none
+            let
+                updatedPlacements =
+                    generate [] pointsAllowed (Random.fastForward pointsAllowed model.initialSeed)
+            in
+            ( { model
+                | pointsAllowed = pointsAllowed
+                , placements = updatedPlacements
+              }
+            , sendPlacements updatedPlacements
             )
 
         SelectMode mode ->
@@ -130,6 +172,9 @@ update msg model =
 
                 _ ->
                     ( { model | mode = mode, alerts = [] }, Cmd.none )
+
+        SubmitLesson ->
+            ( { model | submitting = True }, postLessonCmd model )
 
         GetSeed ->
             ( model, fetchSeedCmd model.apiEndpoint )
@@ -142,10 +187,15 @@ update msg model =
 
         ChessMsg chessMsg ->
             let
+                config =
+                    { toMsg = ChessMsg
+                    , onFenChanged = HandleGameUpdate
+                    }
+
                 ( updatedChessModel, chessCmd ) =
-                    chessUpdate chessMsg model.chessModel
+                    Chess.update config chessMsg model.chessModel
             in
-            ( mapToPlacements { model | chessModel = updatedChessModel }, Cmd.map ChessMsg chessCmd )
+            ( { model | chessModel = updatedChessModel }, chessCmd )
 
 
 
@@ -174,112 +224,41 @@ fetchSeedCmd apiEndpoint =
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
 fetchSeedCompleted model result =
-    case Debug.log "fetch new seed result:" result of
+    case result of
         Ok seed ->
             let
                 nextSeed =
                     Random.initialSeed seed
+
+                updatedPlacements =
+                    generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
             in
-            ( generate
-                { model
-                    | initialSeed = nextSeed
-                    , currentSeed = Random.fastForward model.pointsAllowed nextSeed
-                    , placements = []
-                }
-            , Cmd.none
-            )
+            ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
 
         Err _ ->
             ( model, Cmd.none )
 
 
-postLessonCmd : Model -> String -> Cmd Msg
-postLessonCmd model fen =
+postLessonCmd : Model -> Cmd Msg
+postLessonCmd { currentGame, apiEndpoint } =
     let
         body =
-            jsonBody (E.object [ ( "fen", E.string fen ) ])
+            jsonBody (E.object [ ( "fen", E.string currentGame ) ])
 
         request =
-            Http.post (api model.apiEndpoint ++ "api/lesson") body (D.succeed "cake")
+            Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
     in
-    Http.send PostLessonCompleted <| Debug.log "asdffdsa" request
+    Http.send PostLessonCompleted request
 
 
 postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
 postLessonCompleted model result =
-    case Debug.log "post result" result of
+    case result of
         Ok thing ->
             ( { model | submitting = False }, Cmd.none )
 
         Err _ ->
             ( { model | submitting = False }, Cmd.none )
-
-
-
----- PLACEMENTS ----
-
-
-mapToPlacements : Model -> Model
-mapToPlacements ({ placements, chessModel } as model) =
-    let
-        updatedPlacements =
-            buildPlacements chessModel.board
-    in
-    { model | placements = updatedPlacements }
-
-
-buildPlacements : Board -> List Placement
-buildPlacements board =
-    List.indexedMap
-        (\x row ->
-            List.indexedMap
-                (\y square ->
-                    case square of
-                        Empty ->
-                            Nothing
-
-                        Occupied player piece ->
-                            Just
-                                { piece = piece
-                                , team = player
-                                , square = { x = x + 1, y = y + 1 }
-                                }
-                )
-                row
-        )
-        board
-        |> List.concat
-        |> List.filterMap identity
-
-
-mapToBoard : Model -> Model
-mapToBoard ({ placements, chessModel } as model) =
-    let
-        updatedBoard =
-            buildBoard placements
-
-        updatedChessModel =
-            { chessModel | board = updatedBoard }
-    in
-    { model | chessModel = updatedChessModel }
-
-
-buildBoard : List Placement -> Board
-buildBoard placements =
-    List.map (\rowIndex -> buildRank placements rowIndex) (List.range 1 8)
-
-
-buildRank : List Placement -> Int -> Rank
-buildRank placements rowIndex =
-    List.map (\columnIndex -> buildSquaree placements rowIndex columnIndex) (List.range 1 8)
-
-
-buildSquaree : List Placement -> Int -> Int -> Square
-buildSquaree placements rowIndex columnIndex =
-    List.filter (\{ square } -> rowIndex == square.x && columnIndex == square.y) placements
-        |> List.head
-        |> Maybe.map (\{ piece, team } -> Occupied team piece)
-        |> Maybe.withDefault Empty
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -373,26 +352,31 @@ team team =
             E.string "w"
 
 
-generate : Model -> Model
-generate model =
+generate : List Placement -> Int -> Random.Seed -> List Placement
+generate placements pointsAllowed currentSeed =
     let
         hasBothMonarchs =
-            2 == List.length (List.filter (is Monarch) model.placements)
+            2 == List.length (List.filter (is Monarch) placements)
 
         atMaxScore =
-            currentTotal model.placements == model.pointsAllowed
+            currentTotal placements == pointsAllowed
     in
     if hasBothMonarchs && atMaxScore then
-        mapToBoard model
+        placements
+
     else
-        generate <| generatePlacement model
+        let
+            ( updatedPlacements, nextSeed ) =
+                generatePlacement placements pointsAllowed currentSeed
+        in
+        generate updatedPlacements pointsAllowed nextSeed
 
 
-generatePlacement : Model -> Model
-generatePlacement model =
+generatePlacement : List Placement -> Int -> Random.Seed -> ( List Placement, Random.Seed )
+generatePlacement placements pointsAllowed currentSeed =
     let
         ( selectedSquare, updatedSeed ) =
-            Random.step squareGenerator model.currentSeed
+            Random.step squareGenerator currentSeed
 
         ( piece, moarUpdatedSeed ) =
             Random.step pieceGenerator updatedSeed
@@ -406,16 +390,14 @@ generatePlacement model =
             , team = team
             }
     in
-    { model
-        | currentSeed = evenMoarUpdatedSeed
-        , placements = conditionalUpdatedBoard model.pointsAllowed model.placements constructed
-    }
+    ( conditionalUpdatedBoard pointsAllowed placements constructed, evenMoarUpdatedSeed )
 
 
 conditionalUpdatedBoard : Int -> List Placement -> Placement -> List Placement
 conditionalUpdatedBoard pointsAllowed placements constructed =
     if isLegal pointsAllowed placements constructed then
         placements ++ [ constructed ]
+
     else
         placements
 
@@ -457,6 +439,7 @@ squareNotOpen : State -> Validation
 squareNotOpen { placements, constructed } =
     if List.any (\placement -> placement.square == constructed.square) placements then
         Invalid
+
     else
         Valid
 
@@ -465,6 +448,7 @@ monarchAlreadyPlaced : State -> Validation
 monarchAlreadyPlaced { placements, constructed } =
     if List.any (\placement -> placement.piece == Monarch && constructed.piece == Monarch && placement.team == constructed.team) placements then
         Invalid
+
     else
         Valid
 
@@ -489,6 +473,7 @@ monarchsNotAdjacent { placements, constructed } =
                     && (abs (player.square.y - opponent.square.y) <= 1)
             then
                 Invalid
+
             else
                 Valid
 
@@ -505,6 +490,7 @@ notTooManyPawns { placements, constructed } =
     in
     if List.length forConstructed > 8 then
         Invalid
+
     else
         Valid
 
@@ -516,6 +502,7 @@ pawnsNotInEndRows { constructed } =
             && (constructed.square.y == 1 || constructed.square.y == 8)
     then
         Invalid
+
     else
         Valid
 
@@ -531,6 +518,7 @@ doesntLeadToBalancedGame { placements, constructed } =
             && (currentTotal constructedPlacements > currentTotal otherPlacements)
     then
         Invalid
+
     else
         Valid
 
@@ -546,6 +534,7 @@ alreadyPlacedMaximum { placements, constructed } =
     in
     if maxValue == List.length applicablePlacements then
         Invalid
+
     else
         Valid
 
@@ -581,6 +570,7 @@ notEnoughPointsRemaining : Int -> State -> Validation
 notEnoughPointsRemaining pointsAllowed { placements, constructed } =
     if pointsAllowed < currentTotal placements + findPointValueFromPiece constructed.piece then
         Invalid
+
     else
         Valid
 
@@ -655,7 +645,7 @@ view model =
                     [ div
                         [ H.class "column is-narrow"
                         ]
-                        [ Html.map ChessMsg (chessView model.chessModel)
+                        [ Html.map ChessMsg (Chess.view findConfig model.chessModel)
                         , section [ H.class "columns" ]
                             [ div [ H.class "column is-two-thirds" ] []
                             , div [ H.class "column is-one-third" ]
@@ -667,7 +657,8 @@ view model =
                         [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
                         , viewModeSelection model
                         , h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
-                        , viewKitty model
+
+                        -- , viewKitty model
                         , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
                         , makeSlider model
                         , viewActionMenu model
@@ -682,13 +673,7 @@ view model =
 viewCurrentGame : Model -> Html Msg
 viewCurrentGame { currentGame } =
     h2 [ H.class "is-hidden" ]
-        [ case currentGame of
-            Nothing ->
-                text ""
-
-            Just game ->
-                text game
-        ]
+        [ text currentGame ]
 
 
 viewNavbar : Html Msg
@@ -802,51 +787,42 @@ parseInt rawString =
 
 
 ---- KITTY ----
-
-
-viewKitty : Model -> Html Msg
-viewKitty model =
-    div [ H.class "box" ]
-        (List.map (\team -> viewKittyTeam model team) [ White, Black ])
-
-
-viewKittyTeam : Model -> Player -> Html Msg
-viewKittyTeam model team =
-    let
-        pointsDeployed =
-            List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements
-    in
-    div [ H.class "level" ]
-        (List.map
-            (\piece ->
-                let
-                    isDisabled =
-                        model.pointsAllowed < pointsDeployed + findPointValueFromPiece piece
-                in
-                div [ H.class "level-item" ]
-                    [ button
-                        [ H.class "button is-white"
-                        , H.disabled isDisabled
-                        , H.style [ ( "height", "100%" ) ]
-                        ]
-                        [ kittyPieceView piece team ]
-                    ]
-            )
-            kittyPieces
-        )
-
-
-kittyPieces : List Piece
-kittyPieces =
-    [ Hand, Rook, Bishop, Knight, Pawn ]
-
-
-kittyPieceView : Piece -> Player -> Svg Msg
-kittyPieceView piece player =
-    pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
-
-
-
+-- squareSize =
+--     600 / 8
+-- viewKitty : Model -> Html Msg
+-- viewKitty model =
+--     div [ H.class "box" ]
+--         (List.map (\team -> viewKittyTeam model team) [ White, Black ])
+-- viewKittyTeam : Model -> Player -> Html Msg
+-- viewKittyTeam model team =
+--     let
+--         pointsDeployed =
+--             List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements
+--     in
+--     div [ H.class "level" ]
+--         (List.map
+--             (\piece ->
+--                 let
+--                     isDisabled =
+--                         model.pointsAllowed < pointsDeployed + findPointValueFromPiece piece
+--                 in
+--                 div [ H.class "level-item" ]
+--                     [ button
+--                         [ H.class "button is-white"
+--                         , H.disabled isDisabled
+--                         , H.style [ ( "height", "100%" ) ]
+--                         ]
+--                         [ kittyPieceView piece team ]
+--                     ]
+--             )
+--             kittyPieces
+--         )
+-- kittyPieces : List Piece
+-- kittyPieces =
+--     [ Hand, Rook, Bishop, Knight, Pawn ]
+-- kittyPieceView : Piece -> Player -> Svg Msg
+-- kittyPieceView piece player =
+--     pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
 ---- ACTIONMENU ----
 
 
@@ -856,7 +832,7 @@ viewActionMenu model =
         [ div [ H.class "level" ]
             [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
             , div [ H.class "level-item" ]
-                [ button (loadingButtonAttributes (onClick Validate) "is-info" model.submitting)
+                [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
                     [ text "Submit Lesson" ]
                 ]
             ]
@@ -866,8 +842,9 @@ viewActionMenu model =
 loadingButtonAttributes clickHandler color isLoading =
     let
         displayLoading =
-            if Debug.log "loadingstate" isLoading then
+            if isLoading then
                 "is-loading"
+
             else
                 ""
     in
@@ -884,7 +861,10 @@ loadingButtonAttributes clickHandler color isLoading =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    BuilderJs.fromJs decodeFen
+    Sub.batch
+        [ BuilderJs.fromJs decodeFen
+        , Sub.map ChessMsg (Chess.subscriptions model.chessModel)
+        ]
 
 
 decodeFen : E.Value -> Msg
@@ -913,320 +893,3 @@ main =
         , update = update
         , subscriptions = subscriptions
         }
-
-
-
----- CHESS ----
----- CHESSMODEL ----
-
-
-type alias ChessModel =
-    { board : Board
-    , drag : Maybe Drag
-    , mousePosition : Mouse.Position
-    }
-
-
-type Drag
-    = Drag Player Piece
-
-
-type Player
-    = White
-    | Black
-
-
-type Square
-    = Empty
-    | Occupied Player Piece
-
-
-type Location
-    = Location Int Int
-
-
-type alias Board =
-    List Rank
-
-
-type alias Rank =
-    List Square
-
-
-type alias MouseMove =
-    { offsetX : Int
-    , offsetY : Int
-    }
-
-
-chessInit : ChessModel
-chessInit =
-    { board = newGame
-    , drag = Nothing
-    , mousePosition = { x = 0, y = 0 }
-    }
-
-
-newGame : Board
-newGame =
-    List.repeat 8 (List.repeat 8 Empty)
-
-
-
----- CHESSUPDATE ----
-
-
-type ChessMsg
-    = NoOp
-    | DragStart Player Piece Location
-    | DragEnd Location
-    | MouseMoved MouseMove
-
-
-chessUpdate : ChessMsg -> ChessModel -> ( ChessModel, Cmd ChessMsg )
-chessUpdate msg model =
-    case Debug.log "Main.update" msg of
-        NoOp ->
-            ( model, Cmd.none )
-
-        DragStart player piece location ->
-            let
-                updatedBoard =
-                    emptySquare location model.board
-            in
-            ( { model | board = updatedBoard, drag = Just (Drag player piece) }, Cmd.none )
-
-        DragEnd location ->
-            let
-                updatedBoard =
-                    placePiece location model.drag model.board
-            in
-            ( { model | board = updatedBoard, drag = Nothing }, Cmd.none )
-
-        MouseMoved { offsetX, offsetY } ->
-            ( { model | mousePosition = { x = offsetX, y = offsetY } }, Cmd.none )
-
-
-emptySquare : Location -> Board -> Board
-emptySquare (Location rankIndex fileIndex) board =
-    List.updateAt rankIndex (\rank -> emptySquareInRank rank fileIndex) board
-
-
-emptySquareInRank : Rank -> Int -> Rank
-emptySquareInRank rank fileIndex =
-    List.updateAt fileIndex (\_ -> Empty) rank
-
-
-placePiece : Location -> Maybe Drag -> Board -> Board
-placePiece (Location rankIndex fileIndex) drag board =
-    case drag of
-        Nothing ->
-            board
-
-        Just (Drag player piece) ->
-            List.updateAt rankIndex (\rank -> List.updateAt fileIndex (\_ -> Occupied player piece) rank) board
-
-
-
----- CHESSVIEW ----
-
-
-chessView : ChessModel -> Html ChessMsg
-chessView model =
-    svg
-        [ width (toString boardSize), height (toString boardSize), viewBox boardViewBox ]
-        [ boardView model.board
-        , dragView model
-        ]
-
-
-boardView : Board -> Svg ChessMsg
-boardView board =
-    g [ onMouseMove MouseMoved ]
-        (List.indexedMap rankView (Debug.log "board" board))
-
-
-onMouseMove : (MouseMove -> ChessMsg) -> Svg.Attribute ChessMsg
-onMouseMove callback =
-    Svg.Events.on "mousemove" (D.map callback mouseMoveDecoder)
-
-
-mouseMoveDecoder : D.Decoder MouseMove
-mouseMoveDecoder =
-    JDP.decode MouseMove
-        |> JDP.required "offsetX" D.int
-        |> JDP.required "offsetY" D.int
-
-
-dragView : ChessModel -> Svg ChessMsg
-dragView { drag, mousePosition } =
-    case drag of
-        Nothing ->
-            Svg.text ""
-
-        Just (Drag player piece) ->
-            pieceView piece player [ style "pointer-events: none;" ] (toFloat mousePosition.x) (toFloat mousePosition.y)
-
-
-boardViewBox : String
-boardViewBox =
-    [ 0, 0, boardSize, boardSize ]
-        |> List.map toString
-        |> String.join " "
-
-
-rankView : Int -> Rank -> Svg ChessMsg
-rankView rankIndex rank =
-    g [] (List.indexedMap (squareView rankIndex) rank)
-
-
-squareView : Int -> Int -> Square -> Svg ChessMsg
-squareView rankIndex fileIndex square =
-    svg
-        [ x (toString <| rankIndex * squareSize)
-        , y (toString <| (7 - fileIndex) * squareSize)
-        , width <| toString <| squareSize
-        , height <| toString <| squareSize
-        , onMouseUp (DragEnd (Location rankIndex fileIndex))
-        ]
-        [ squareFillView rankIndex fileIndex square
-        , coordinateAnnotationView rankIndex fileIndex
-        , squarePieceView square (Location rankIndex fileIndex)
-        ]
-
-
-squarePieceView : Square -> Location -> Svg ChessMsg
-squarePieceView square location =
-    case square of
-        Empty ->
-            g [] []
-
-        Occupied player piece ->
-            pieceView piece player [ onMouseDown (DragStart player piece location) ] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
-
-
-pieceView : Piece -> Player -> (List (Svg.Attribute msg) -> Float -> Float -> Svg msg)
-pieceView piece player attrs left top =
-    case piece of
-        Pawn ->
-            case player of
-                Black ->
-                    Piece.blackPawn attrs left top
-
-                White ->
-                    Piece.whitePawn attrs left top
-
-        Bishop ->
-            case player of
-                Black ->
-                    Piece.blackBishop attrs left top
-
-                White ->
-                    Piece.whiteBishop attrs left top
-
-        Knight ->
-            case player of
-                Black ->
-                    Piece.blackKnight attrs left top
-
-                White ->
-                    Piece.whiteKnight attrs left top
-
-        Monarch ->
-            case player of
-                Black ->
-                    Piece.blackKing attrs left top
-
-                White ->
-                    Piece.whiteKing attrs left top
-
-        Hand ->
-            case player of
-                Black ->
-                    Piece.blackQueen attrs left top
-
-                White ->
-                    Piece.whiteQueen attrs left top
-
-        Rook ->
-            case player of
-                Black ->
-                    Piece.blackRook attrs left top
-
-                White ->
-                    Piece.whiteRook attrs left top
-
-
-squareFillView : Int -> Int -> Square -> Svg ChessMsg
-squareFillView rankIndex fileIndex square =
-    rect
-        [ width (toString squareSize)
-        , height (toString squareSize)
-        , fill <| squareColor rankIndex fileIndex
-        ]
-        []
-
-
-squareColor : Int -> Int -> String
-squareColor rankIndex fileIndex =
-    if isEven (rankIndex + fileIndex) then
-        palette.purple
-    else
-        palette.gray
-
-
-coordinateAnnotationView : Int -> Int -> Svg ChessMsg
-coordinateAnnotationView rankIndex fileIndex =
-    g [] <|
-        List.filterMap identity <|
-            [ if fileIndex == 0 then
-                Just <| letterView rankIndex
-              else
-                Nothing
-            , if rankIndex == 0 then
-                Just <| numberView fileIndex
-              else
-                Nothing
-            ]
-
-
-letterView : Int -> Svg ChessMsg
-letterView rankIndex =
-    text_
-        [ fontSize <| toString <| coordsFontSize
-        , x <| toString <| (squareSize - coordsFontSize)
-        , y <| toString <| (8 + squareSize - coordsFontSize)
-        ]
-        [ text (indexToRank rankIndex) ]
-
-
-coordsFontSize : Int
-coordsFontSize =
-    14
-
-
-numberView : Int -> Svg ChessMsg
-numberView fileIndex =
-    text_
-        [ fontSize <| toString <| coordsFontSize
-        , x "5"
-        , y "18"
-        ]
-        [ text <| toString <| fileIndex + 1 ]
-
-
-boardSize : Int
-boardSize =
-    600
-
-
-squareSize : Int
-squareSize =
-    boardSize // 8
-
-
-indexToRank : Int -> String
-indexToRank index =
-    [ "a", "b", "c", "d", "e", "f", "g", "h" ]
-        |> List.getAt index
-        |> Maybe.withDefault ""
