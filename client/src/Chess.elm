@@ -5,6 +5,7 @@ module Chess exposing
     , subscriptions
     , update
     , view
+    , getSquaresSelected
     )
 
 {-|
@@ -45,6 +46,7 @@ type State
         { board : Board
         , drag : Drag.State DraggableItem
         , hover : Maybe Position
+        , squaresSelected : List Position
         }
 
 
@@ -81,7 +83,14 @@ fromFen fen =
                         , original = Animation.style present
                         , cursor = Animation.style gone
                         }
+                    , squaresSelected = []
                     }
+
+
+{-| -}
+getSquaresSelected : State -> List Position
+getSquaresSelected (State state) =
+    state.squaresSelected
 
 
 
@@ -91,6 +100,7 @@ fromFen fen =
 {-| -}
 type Msg
     = SetHover Position
+    | SelectSquare Position
     | DragMsg (Drag.Msg DraggableItem)
     | FinalRelease DraggableItem
 
@@ -107,6 +117,9 @@ update config msg (State state) =
     case msg of
         SetHover position ->
             ( State { state | hover = Just position }, Cmd.none )
+
+        SelectSquare position ->
+            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
 
         DragMsg dragMsg ->
             Drag.update dragConfig dragMsg state.drag
@@ -227,16 +240,21 @@ viewCell drag position square =
         Empty ->
             Chess.View.Board.square position
                 square
-                [ onMouseEnter (SetHover position) ]
+                [ onMouseEnter (SetHover position)
+                , onClick (SelectSquare position)
+                ]
                 []
 
         Occupied player piece ->
             Chess.View.Board.square position
                 square
-                (onMouseEnter (SetHover position)
-                    :: Html.Attributes.style [ ( "cursor", "grab" ) ]
-                    :: Drag.draggableAttributes dragConfig
-                        (DraggableItem position player piece)
+                (List.concat
+                    [ onMouseEnter (SetHover position)
+                        :: Html.Attributes.style [ ( "cursor", "grab" ) ]
+                        :: Drag.draggableAttributes dragConfig
+                            (DraggableItem position player piece)
+                    , [ onClick (SelectSquare position) ]
+                    ]
                 )
                 (animateDrag position drag)
 
