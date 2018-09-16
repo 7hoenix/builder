@@ -1,14 +1,16 @@
-module Builder exposing (Flags, Model, Msg(..), Piece(..), Placement, SquareLocation, State, SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, fetchSeed, fetchSeedCmd, fetchSeedCompleted, findPointValueFromPiece, generate, generatePlacement, getSeedUrl, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, update, view, viewActionMenu, viewAlerts, viewCurrentGame, viewModeSelection, viewNavbar)
+module Builder exposing (Flags, Hints(..), Lesson, Model, Msg(..), Piece(..), Placement, SquareLocation, State, Store(..), SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, fetchSeed, fetchSeedCmd, fetchSeedCompleted, findConfig, findPointValueFromPiece, findStorageKey, generate, generatePlacement, getSeedUrl, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, toCommand, update, view, viewActionMenu, viewAlerts, viewModeSelection, viewNavbar, viewSquareHints)
 
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
 import BuilderJs
-import Chess exposing (Msg, State, fromFen, subscriptions, update, view)
+import Char
+import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
 import Chess.Data.Board exposing (Square(..))
 import Chess.Data.Piece exposing (Piece(..))
 import Chess.Data.Player exposing (Player(..))
-import Chess.Data.Position exposing (Position)
+import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
+import Dict exposing (Dict)
 import Drag
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
 import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
@@ -58,9 +60,10 @@ type SupportedMode
 type alias Model =
     { apiEndpoint : String
     , mode : SupportedMode
-    , currentGame : String
+    , store : Store
+    , currentGameState : String
+    , initialGameState : Maybe String
     , initialSeed : Random.Seed
-    , currentSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
     , submitting : Bool
@@ -90,16 +93,17 @@ init flags =
         initialChessState =
             case Chess.fromFen blankGameFen of
                 Nothing ->
-                    Debug.crash "FEN PARSER IS BROKEN PANIC"
+                    Debug.crash "FEN PARSER IS BROKEN, PANIC"
 
                 Just state ->
                     state
     in
     ( { apiEndpoint = flags.apiEndpoint
       , mode = Basic
-      , currentGame = blankGameFen
+      , store = Store Dict.empty
+      , currentGameState = blankGameFen
+      , initialGameState = Nothing
       , initialSeed = initialSeed
-      , currentSeed = initialSeed
       , placements = initialPlacements
       , pointsAllowed = 1
       , submitting = False
@@ -132,7 +136,9 @@ type Msg
     | GetSeed
     | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
+    | Record
     | ChessMsg Chess.Msg
+    | WriteHint String String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -142,16 +148,7 @@ update msg model =
             ( model, sendPlacements model.placements )
 
         HandleGameUpdate fen ->
-            let
-                updatedState =
-                    case Chess.fromFen fen of
-                        Nothing ->
-                            Debug.crash "BAD FEN"
-
-                        Just s ->
-                            s
-            in
-            ( { model | currentGame = fen, chessModel = updatedState }, Cmd.none )
+            ( handleGameUpdate model fen, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
             let
@@ -185,6 +182,9 @@ update msg model =
         PostLessonCompleted result ->
             postLessonCompleted model result
 
+        Record ->
+            ( handleGameUpdate { model | initialGameState = Just model.currentGameState } model.currentGameState, Cmd.none )
+
         ChessMsg chessMsg ->
             let
                 config =
@@ -196,6 +196,14 @@ update msg model =
                     Chess.update config chessMsg model.chessModel
             in
             ( { model | chessModel = updatedChessModel }, chessCmd )
+
+        WriteHint position content ->
+            case model.initialGameState of
+                Just _ ->
+                    ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
 
 
@@ -240,15 +248,46 @@ fetchSeedCompleted model result =
 
 
 postLessonCmd : Model -> Cmd Msg
-postLessonCmd { currentGame, apiEndpoint } =
-    let
-        body =
-            jsonBody (E.object [ ( "fen", E.string currentGame ) ])
+postLessonCmd { initialGameState, store, apiEndpoint } =
+    case initialGameState of
+        Nothing ->
+            Debug.crash "NO GAME STATE, DISABLE THIS BUTTON UNTIL YOU HAVE ONE"
 
-        request =
-            Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
+        Just gameState ->
+            let
+                body =
+                    jsonBody
+                        (E.object
+                            [ ( "title", E.string "The net" )
+                            , ( "initialGameState", E.string gameState )
+                            , ( "store", encodeStore store )
+                            ]
+                        )
+
+                request =
+                    Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
+            in
+            Http.send PostLessonCompleted request
+
+
+encodeStore : Store -> E.Value
+encodeStore (Store store) =
+    E.object <| List.map (\( f, a ) -> ( f, encodeFrame a )) <| Dict.toList store
+
+
+encodeFrame : Frame -> E.Value
+encodeFrame { squares, defaultMessage } =
+    let
+        (Hints hints) =
+            squares
+
+        squaresEncoder =
+            List.map (\( f, a ) -> ( f, E.string a )) <| Dict.toList hints
     in
-    Http.send PostLessonCompleted request
+    E.object
+        [ ( "squares", E.object squaresEncoder )
+        , ( "defaultMessage", E.string defaultMessage )
+        ]
 
 
 postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
@@ -259,6 +298,84 @@ postLessonCompleted model result =
 
         Err _ ->
             ( { model | submitting = False }, Cmd.none )
+
+
+
+---- GAME UPDATE ----
+
+
+handleGameUpdate : Model -> String -> Model
+handleGameUpdate model newFen =
+    let
+        updatedState =
+            case Chess.fromFen newFen of
+                Nothing ->
+                    Debug.crash "BAD FEN"
+
+                Just s ->
+                    s
+
+        blankFrame =
+            Frame (Hints Dict.empty) "Blank Frame"
+
+        storageKey =
+            findStorageKey newFen
+
+        (Store rawStore) =
+            model.store
+
+        maybeFrame =
+            Dict.get storageKey rawStore
+
+        updatedStore =
+            case ( maybeFrame, model.initialGameState ) of
+                ( Nothing, Just _ ) ->
+                    Store (Dict.insert storageKey blankFrame rawStore)
+
+                ( _, _ ) ->
+                    model.store
+    in
+    { model
+        | chessModel = updatedState
+        , store = updatedStore
+        , currentGameState = newFen
+    }
+
+
+saveHint : Store -> String -> String -> String -> Store
+saveHint (Store store) frameKey positionKey content =
+    let
+        maybeFrame =
+            Dict.get frameKey store
+
+        frame =
+            case maybeFrame of
+                Nothing ->
+                    Debug.crash "impossible state is not impossible :("
+
+                Just f ->
+                    f
+
+        (Hints rawHints) =
+            frame.squares
+
+        maybeSquareHint =
+            Dict.get positionKey rawHints
+
+        updatedSquareHints =
+            case maybeSquareHint of
+                Nothing ->
+                    Dict.insert positionKey content rawHints
+
+                Just hint ->
+                    Dict.update positionKey
+                        (\_ -> Just content)
+                        rawHints
+
+        updatedFrame =
+            { frame | squares = Hints updatedSquareHints }
+    in
+    Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -656,24 +773,15 @@ view model =
                     , div [ H.class "column is-narrow has-text-centered" ]
                         [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
                         , viewModeSelection model
-                        , h3 [ H.class "subtitle is-5" ] [ text "Available Pieces" ]
-
-                        -- , viewKitty model
+                        , viewHints model
                         , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
                         , makeSlider model
                         , viewActionMenu model
-                        , viewCurrentGame model
                         ]
                     ]
                 ]
             ]
         ]
-
-
-viewCurrentGame : Model -> Html Msg
-viewCurrentGame { currentGame } =
-    h2 [ H.class "is-hidden" ]
-        [ text currentGame ]
 
 
 viewNavbar : Html Msg
@@ -786,43 +894,112 @@ parseInt rawString =
 
 
 
----- KITTY ----
--- squareSize =
---     600 / 8
--- viewKitty : Model -> Html Msg
--- viewKitty model =
---     div [ H.class "box" ]
---         (List.map (\team -> viewKittyTeam model team) [ White, Black ])
--- viewKittyTeam : Model -> Player -> Html Msg
--- viewKittyTeam model team =
---     let
---         pointsDeployed =
---             List.foldr (\placement result -> result + findPointValueFromPiece placement.piece) 0 model.placements
---     in
---     div [ H.class "level" ]
---         (List.map
---             (\piece ->
---                 let
---                     isDisabled =
---                         model.pointsAllowed < pointsDeployed + findPointValueFromPiece piece
---                 in
---                 div [ H.class "level-item" ]
---                     [ button
---                         [ H.class "button is-white"
---                         , H.disabled isDisabled
---                         , H.style [ ( "height", "100%" ) ]
---                         ]
---                         [ kittyPieceView piece team ]
---                     ]
---             )
---             kittyPieces
---         )
--- kittyPieces : List Piece
--- kittyPieces =
---     [ Hand, Rook, Bishop, Knight, Pawn ]
--- kittyPieceView : Piece -> Player -> Svg Msg
--- kittyPieceView piece player =
---     pieceView piece player [] (toFloat <| squareSize // 2) (toFloat <| squareSize // 2)
+---- HINTS ----
+
+
+viewHints : Model -> Html Msg
+viewHints model =
+    case getFrameHints model.store model.currentGameState of
+        Nothing ->
+            text ""
+
+        Just hints ->
+            div []
+                [ h3 [ H.class "subtitle is-5" ] [ text "Square Hints" ]
+                , viewSquareHints (getSquaresSelected model.chessModel) hints
+                ]
+
+
+getFrameHints : Store -> String -> Maybe Hints
+getFrameHints store gameState =
+    Maybe.map (\frame -> frame.squares) <| getFrame store gameState
+
+
+getFrame : Store -> String -> Maybe Frame
+getFrame (Store store) gameState =
+    Dict.get (findStorageKey gameState) store
+
+
+
+---- LESSON SYSTEM ----
+-- TODO: see if we can't centralize these types in a place where both projects can use them...
+
+
+type alias Lesson =
+    { store : Store
+    , title : String
+    , initialGameState : String
+    }
+
+
+type alias PartialFenState =
+    String
+
+
+type Store
+    = Store (Dict PartialFenState Frame)
+
+
+type alias Frame =
+    { squares : Hints
+    , defaultMessage : String
+    }
+
+
+type alias SquareKey =
+    String
+
+
+type Hints
+    = Hints (Dict SquareKey String)
+
+
+viewSquareHints : List Position -> Hints -> Html Msg
+viewSquareHints selectedSquares (Hints hints) =
+    case selectedSquares of
+        [] ->
+            text "Click any square"
+
+        _ ->
+            div []
+                (List.map
+                    (\square ->
+                        let
+                            storageKey =
+                                toCommand square
+
+                            hint =
+                                case Dict.get storageKey hints of
+                                    Nothing ->
+                                        ""
+
+                                    Just h ->
+                                        h
+                        in
+                        div []
+                            [ input [ H.placeholder storageKey, H.value hint, Html.Events.onInput (WriteHint storageKey) ] []
+                            ]
+                    )
+                    selectedSquares
+                )
+
+
+findStorageKey : String -> String
+findStorageKey fullFenState =
+    String.join " " <| List.take 2 <| String.words fullFenState
+
+
+toCommand : Position -> String
+toCommand position =
+    let
+        -- TODO: move this function into elm-chess/Chess.Data.Position
+        ( row, column ) =
+            toRowColumn position
+    in
+    String.fromChar (Char.fromCode <| column + 97) ++ toString (8 - row)
+
+
+
 ---- ACTIONMENU ----
 
 
@@ -831,10 +1008,15 @@ viewActionMenu model =
     div []
         [ div [ H.class "level" ]
             [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
-            , div [ H.class "level-item" ]
-                [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
-                    [ text "Submit Lesson" ]
-                ]
+            , case model.initialGameState of
+                Nothing ->
+                    div [ H.class "level-item" ] [ button [ onClick Record, H.class "button is-info" ] [ text "Start Recording" ] ]
+
+                Just _ ->
+                    div [ H.class "level-item" ]
+                        [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
+                            [ text "Submit Lesson" ]
+                        ]
             ]
         ]
 
