@@ -139,6 +139,7 @@ type Msg
     | Record
     | ChessMsg Chess.Msg
     | WriteHint String String
+    | WriteDefaultMessage String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -201,6 +202,14 @@ update msg model =
             case model.initialGameState of
                 Just _ ->
                     ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        WriteDefaultMessage content ->
+            case model.initialGameState of
+                Just _ ->
+                    ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) content }, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -316,7 +325,7 @@ handleGameUpdate model newFen =
                     s
 
         blankFrame =
-            Frame (Hints Dict.empty) "Blank Frame"
+            Frame (Hints Dict.empty) "Click the yellow square"
 
         storageKey =
             findStorageKey newFen
@@ -374,6 +383,26 @@ saveHint (Store store) frameKey positionKey content =
 
         updatedFrame =
             { frame | squares = Hints updatedSquareHints }
+    in
+    Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
+
+
+saveDefaultMessage : Store -> String -> String -> Store
+saveDefaultMessage (Store store) frameKey content =
+    let
+        maybeFrame =
+            Dict.get frameKey store
+
+        frame =
+            case maybeFrame of
+                Nothing ->
+                    Debug.crash "impossible state is not impossible :("
+
+                Just f ->
+                    f
+
+        updatedFrame =
+            { frame | defaultMessage = content }
     in
     Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
 
@@ -899,14 +928,19 @@ parseInt rawString =
 
 viewHints : Model -> Html Msg
 viewHints model =
-    case getFrameHints model.store model.currentGameState of
+    let
+        maybeFrame =
+            getFrame model.store model.currentGameState
+    in
+    case maybeFrame of
         Nothing ->
             text ""
 
-        Just hints ->
+        Just frame ->
             div []
                 [ h3 [ H.class "subtitle is-5" ] [ text "Square Hints" ]
-                , viewSquareHints (getSquaresSelected model.chessModel) hints
+                , div [] [ input [ H.placeholder "The enemies gate is down", H.value frame.defaultMessage, Html.Events.onInput WriteDefaultMessage ] [] ]
+                , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
                 ]
 
 
