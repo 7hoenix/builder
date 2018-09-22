@@ -226,7 +226,7 @@ api apiEndpoint =
 
 getSeedUrl : String -> String
 getSeedUrl apiEndpoint =
-    api apiEndpoint ++ "api/seed"
+    api apiEndpoint ++ "seed"
 
 
 fetchSeed : String -> Http.Request Int
@@ -268,13 +268,13 @@ postLessonCmd { initialGameState, store, apiEndpoint } =
                     jsonBody
                         (E.object
                             [ ( "title", E.string "The net" )
-                            , ( "initialGameState", E.string gameState )
+                            , ( "state", E.string gameState )
                             , ( "store", encodeStore store )
                             ]
                         )
 
                 request =
-                    Http.post (api apiEndpoint ++ "api/lesson") body (D.succeed "cake")
+                    Http.post (api apiEndpoint ++ "lessons") body (D.succeed "cake")
             in
             Http.send PostLessonCompleted request
 

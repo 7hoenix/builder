@@ -7,6 +7,8 @@ const chess = new Chess();
 const endpoint = process.env.ELM_APP_API_ENDPOINT;
 const apiEndpoint = endpoint
   ? endpoint
-  : "https://young-meadow-51179.herokuapp.com";
+  : "https://trained-backend.herokuapp.com";
 const initialSeed = 1;
 builder(chess, apiEndpoint, initialSeed);
+
+// : "https://young-meadow-51179.herokuapp.com/api";
