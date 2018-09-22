@@ -1,4 +1,4 @@
-module Builder exposing (Flags, Hints(..), Lesson, Model, Msg(..), Piece(..), Placement, SquareLocation, State, Store(..), SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, fetchSeed, fetchSeedCmd, fetchSeedCompleted, findConfig, findPointValueFromPiece, findStorageKey, generate, generatePlacement, getSeedUrl, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, toCommand, update, view, viewActionMenu, viewAlerts, viewModeSelection, viewNavbar, viewSquareHints)
+module Builder exposing (Flags, Frame, Hints(..), Lesson, Model, Msg(..), PartialFenState, Piece(..), Placement, SquareKey, SquareLocation, State, Store(..), SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, encodeFrame, encodeStore, fetchSeedCompleted, findConfig, findNextSeed, findPointValueFromPiece, findStorageKey, generate, generatePlacement, getFrame, getFrameHints, handleGameUpdate, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, saveDefaultMessage, saveHint, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, toCommand, update, view, viewActionMenu, viewAlerts, viewHints, viewModeSelection, viewNavbar, viewSquareHints)
 
 import AppColor exposing (palette)
 import Arithmetic exposing (isEven)
@@ -26,6 +26,8 @@ import Random.Pcg as Random
 import Svg exposing (Svg, g, rect, svg, text, text_)
 import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
 import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
+import Task
+import Time
 
 
 
@@ -140,6 +142,7 @@ type Msg
     | ChessMsg Chess.Msg
     | WriteHint String String
     | WriteDefaultMessage String
+    | RegenerateSeed Time.Time
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -174,8 +177,18 @@ update msg model =
         SubmitLesson ->
             ( { model | submitting = True }, postLessonCmd model )
 
+        RegenerateSeed currentTime ->
+            let
+                nextSeed =
+                    findNextSeed currentTime
+
+                updatedPlacements =
+                    generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
+            in
+            ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
+
         GetSeed ->
-            ( model, fetchSeedCmd model.apiEndpoint )
+            ( model, Task.perform RegenerateSeed Time.now )
 
         FetchSeedCompleted result ->
             fetchSeedCompleted model result
@@ -224,19 +237,9 @@ api apiEndpoint =
     apiEndpoint ++ "/"
 
 
-getSeedUrl : String -> String
-getSeedUrl apiEndpoint =
-    api apiEndpoint ++ "seed"
-
-
-fetchSeed : String -> Http.Request Int
-fetchSeed apiEndpoint =
-    Http.get (getSeedUrl apiEndpoint) (D.at [ "seed" ] D.int)
-
-
-fetchSeedCmd : String -> Cmd Msg
-fetchSeedCmd apiEndpoint =
-    Http.send FetchSeedCompleted (fetchSeed apiEndpoint)
+findNextSeed : Time.Time -> Random.Seed
+findNextSeed fdsa =
+    Random.initialSeed <| Basics.floor <| Time.inMilliseconds fdsa
 
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
