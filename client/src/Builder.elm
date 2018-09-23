@@ -56,6 +56,7 @@ type alias Placement =
 
 type SupportedMode
     = Basic
+    | Sequence
     | ForcingMoves
 
 
@@ -102,7 +103,7 @@ init flags =
     in
     ( { apiEndpoint = flags.apiEndpoint
       , mode = Basic
-      , store = Store Dict.empty
+      , store = MetaDictionary Dict.empty
       , currentGameState = blankGameFen
       , initialGameState = Nothing
       , initialSeed = initialSeed
@@ -168,11 +169,14 @@ update msg model =
 
         SelectMode mode ->
             case mode of
+                Basic ->
+                    ( { model | mode = mode, store = MetaDictionary Dict.empty, alerts = [] }, Cmd.none )
+
+                Sequence ->
+                    ( { model | mode = mode, store = SeqDictionary [], alerts = [] }, Cmd.none )
+
                 ForcingMoves ->
                     ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
-
-                _ ->
-                    ( { model | mode = mode, alerts = [] }, Cmd.none )
 
         SubmitLesson ->
             ( { model | submitting = True }, postLessonCmd model )
@@ -283,8 +287,13 @@ postLessonCmd { initialGameState, store, apiEndpoint } =
 
 
 encodeStore : Store -> E.Value
-encodeStore (Store store) =
-    E.object <| List.map (\( f, a ) -> ( f, encodeFrame a )) <| Dict.toList store
+encodeStore store =
+    case store of
+        MetaDictionary md ->
+            E.object <| List.map (\( f, a ) -> ( f, encodeFrame a )) <| Dict.toList md
+
+        SeqDictionary sd ->
+            E.list <| List.map (\frame -> encodeFrame frame) sd
 
 
 encodeFrame : Frame -> E.Value
@@ -333,19 +342,18 @@ handleGameUpdate model newFen =
         storageKey =
             findStorageKey newFen
 
-        (Store rawStore) =
-            model.store
-
-        maybeFrame =
-            Dict.get storageKey rawStore
-
         updatedStore =
-            case ( maybeFrame, model.initialGameState ) of
-                ( Nothing, Just _ ) ->
-                    Store (Dict.insert storageKey blankFrame rawStore)
+            case model.store of
+                MetaDictionary md ->
+                    case ( Dict.get storageKey md, model.initialGameState ) of
+                        ( Nothing, Just _ ) ->
+                            MetaDictionary (Dict.insert storageKey blankFrame md)
 
-                ( _, _ ) ->
-                    model.store
+                        ( _, _ ) ->
+                            model.store
+
+                SeqDictionary sd ->
+                    SeqDictionary ([ blankFrame ] ++ sd)
     in
     { model
         | chessModel = updatedState
@@ -355,19 +363,45 @@ handleGameUpdate model newFen =
 
 
 saveHint : Store -> String -> String -> String -> Store
-saveHint (Store store) frameKey positionKey content =
+saveHint store frameKey positionKey content =
+    case store of
+        MetaDictionary md ->
+            let
+                maybeFrame =
+                    Dict.get frameKey md
+
+                frame =
+                    case maybeFrame of
+                        Nothing ->
+                            Debug.crash "impossible state is not impossible :("
+
+                        Just f ->
+                            f
+
+                updatedFrame =
+                    saveHintInFrame frame positionKey content
+            in
+            MetaDictionary (Dict.update frameKey (\_ -> Just updatedFrame) md)
+
+        SeqDictionary sd ->
+            case sd of
+                [] ->
+                    SeqDictionary sd
+
+                frame :: otherFrames ->
+                    let
+                        updatedFrame =
+                            saveHintInFrame frame positionKey content
+
+                        updatedSequenceDictionary =
+                            updatedFrame :: otherFrames
+                    in
+                    SeqDictionary updatedSequenceDictionary
+
+
+saveHintInFrame : Frame -> String -> String -> Frame
+saveHintInFrame frame positionKey content =
     let
-        maybeFrame =
-            Dict.get frameKey store
-
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
-
-                Just f ->
-                    f
-
         (Hints rawHints) =
             frame.squares
 
@@ -383,31 +417,45 @@ saveHint (Store store) frameKey positionKey content =
                     Dict.update positionKey
                         (\_ -> Just content)
                         rawHints
-
-        updatedFrame =
-            { frame | squares = Hints updatedSquareHints }
     in
-    Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
+    { frame | squares = Hints updatedSquareHints }
 
 
 saveDefaultMessage : Store -> String -> String -> Store
-saveDefaultMessage (Store store) frameKey content =
-    let
-        maybeFrame =
-            Dict.get frameKey store
+saveDefaultMessage store frameKey content =
+    case store of
+        MetaDictionary md ->
+            let
+                maybeFrame =
+                    Dict.get frameKey md
 
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
+                frame =
+                    case maybeFrame of
+                        Nothing ->
+                            Debug.crash "impossible state is not impossible :("
 
-                Just f ->
-                    f
+                        Just f ->
+                            f
 
-        updatedFrame =
-            { frame | defaultMessage = content }
-    in
-    Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
+                updatedFrame =
+                    { frame | defaultMessage = content }
+            in
+            MetaDictionary (Dict.update frameKey (\_ -> Just updatedFrame) md)
+
+        SeqDictionary sd ->
+            case sd of
+                [] ->
+                    SeqDictionary sd
+
+                frame :: otherFrames ->
+                    let
+                        updatedFrame =
+                            { frame | defaultMessage = content }
+
+                        updatedSequenceDictionary =
+                            updatedFrame :: otherFrames
+                    in
+                    SeqDictionary updatedSequenceDictionary
 
 
 sendPlacements : List Placement -> Cmd msg
@@ -887,6 +935,7 @@ viewModeSelection model =
     in
     div [ H.class "box", H.class "control" ]
         [ radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+        , radio (SelectMode Sequence) " Sequence" "mode" (isChecked Sequence)
         , radio (SelectMode ForcingMoves) " Forcing Moves" "mode" (isChecked ForcingMoves)
         ]
 
@@ -953,8 +1002,18 @@ getFrameHints store gameState =
 
 
 getFrame : Store -> String -> Maybe Frame
-getFrame (Store store) gameState =
-    Dict.get (findStorageKey gameState) store
+getFrame store gameState =
+    case store of
+        MetaDictionary md ->
+            Dict.get (findStorageKey gameState) md
+
+        SeqDictionary sd ->
+            case sd of
+                [] ->
+                    Nothing
+
+                frame :: _ ->
+                    Just frame
 
 
 
@@ -974,7 +1033,8 @@ type alias PartialFenState =
 
 
 type Store
-    = Store (Dict PartialFenState Frame)
+    = MetaDictionary (Dict PartialFenState Frame)
+    | SeqDictionary (List Frame)
 
 
 type alias Frame =
