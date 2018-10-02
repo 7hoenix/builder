@@ -1,10 +1,9 @@
 {
   "name": "builder",
   "version": "1.0.0",
-  "description": "This project is bootstrapped with [Create Elm App](https://github.com/halfzebra/create-elm-app).",
+  "description": "Create lesson content",
   "main": "src/index.js",
   "directories": {
-    "test": "tests"
   },
   "scripts": {
     "build": "elm-app build",

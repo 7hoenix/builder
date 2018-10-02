@@ -8,7 +8,5 @@ const endpoint = process.env.ELM_APP_API_ENDPOINT;
 const apiEndpoint = endpoint
   ? endpoint
   : "https://trained-backend.herokuapp.com";
-const initialSeed = 1;
+const initialSeed = Math.floor(Math.random() * 10 + 1);
 builder(chess, apiEndpoint, initialSeed);
-
-// : "https://young-meadow-51179.herokuapp.com/api";

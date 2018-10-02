@@ -1,31 +1,19 @@
-module Builder exposing (Flags, Frame, Hints(..), Lesson, Model, Msg(..), PartialFenState, Piece(..), Placement, SquareKey, SquareLocation, State, Store(..), SupportedMode(..), Validation(..), alreadyPlacedMaximum, api, conditionalUpdatedBoard, currentTotal, decodeFen, doesntLeadToBalancedGame, encodeFrame, encodeStore, fetchSeedCompleted, findConfig, findNextSeed, findPointValueFromPiece, findStorageKey, generate, generatePlacement, getFrame, getFrameHints, handleGameUpdate, init, is, isLegal, loadingButtonAttributes, main, makeSlider, maximumPieceCount, monarchAlreadyPlaced, monarchsNotAdjacent, notEnoughPointsRemaining, notTooManyPawns, parseInt, pawnsNotInEndRows, piece, pieceGenerator, placement, postLessonCmd, postLessonCompleted, pplacements, radio, saveDefaultMessage, saveHint, sendPlacements, square, squareGenerator, squareNotOpen, subscriptions, team, teamGenerator, toCommand, update, view, viewActionMenu, viewAlerts, viewHints, viewModeSelection, viewNavbar, viewSquareHints)
+module Builder exposing (main)
 
-import AppColor exposing (palette)
-import Arithmetic exposing (isEven)
 import BuilderJs
 import Char
 import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
-import Chess.Data.Board exposing (Square(..))
-import Chess.Data.Piece exposing (Piece(..))
 import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
 import Dict exposing (Dict)
-import Drag
-import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, img, input, label, nav, section, span)
-import Html.Attributes as H exposing (defaultValue, href, max, min, src, target, type_)
+import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, input, label, nav, section, span, text)
+import Html.Attributes as H exposing (defaultValue, href, max, min, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
-import Http exposing (Request, getString, jsonBody)
+import Http exposing (Request, jsonBody)
 import Json.Decode as D
-import Json.Decode.Pipeline as JDP
 import Json.Encode as E
-import List.Extra as List
-import Mouse
-import Piece
 import Random.Pcg as Random
-import Svg exposing (Svg, g, rect, svg, text, text_)
-import Svg.Attributes exposing (fill, fontSize, height, rx, ry, style, viewBox, width, x, y)
-import Svg.Events exposing (onMouseDown, onMouseMove, onMouseUp)
 import Task
 import Time
 
@@ -130,68 +118,38 @@ findConfig =
 
 
 type Msg
-    = Validate
+    = ChessMsg Chess.Msg
+    | FetchSeedCompleted (Result Http.Error Int)
+    | GetSeed
     | HandleGameUpdate String
     | HandleSliderChange Int
-    | SelectMode SupportedMode
-    | SubmitLesson
-    | GetSeed
-    | FetchSeedCompleted (Result Http.Error Int)
     | PostLessonCompleted (Result Http.Error String)
     | Record
-    | ChessMsg Chess.Msg
-    | WriteHint String String
-    | WriteDefaultMessage String
     | RegenerateSeed Time.Time
+    | SelectMode SupportedMode
+    | SubmitLesson
+    | Validate
+    | WriteDefaultMessage String
+    | WriteHint String String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Validate ->
-            ( model, sendPlacements model.placements )
+        ChessMsg chessMsg ->
+            handleChessMsg model chessMsg
+
+        FetchSeedCompleted result ->
+            fetchSeedCompleted model result
+
+        GetSeed ->
+            ( model, Task.perform RegenerateSeed Time.now )
 
         HandleGameUpdate fen ->
             ( handleGameUpdate model fen, Cmd.none )
 
         HandleSliderChange pointsAllowed ->
-            let
-                updatedPlacements =
-                    generate [] pointsAllowed (Random.fastForward pointsAllowed model.initialSeed)
-            in
-            ( { model
-                | pointsAllowed = pointsAllowed
-                , placements = updatedPlacements
-              }
-            , sendPlacements updatedPlacements
-            )
-
-        SelectMode mode ->
-            case mode of
-                ForcingMoves ->
-                    ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
-
-                _ ->
-                    ( { model | mode = mode, alerts = [] }, Cmd.none )
-
-        SubmitLesson ->
-            ( { model | submitting = True }, postLessonCmd model )
-
-        RegenerateSeed currentTime ->
-            let
-                nextSeed =
-                    findNextSeed currentTime
-
-                updatedPlacements =
-                    generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
-            in
-            ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
-
-        GetSeed ->
-            ( model, Task.perform RegenerateSeed Time.now )
-
-        FetchSeedCompleted result ->
-            fetchSeedCompleted model result
+            handleSliderChange pointsAllowed model
 
         PostLessonCompleted result ->
             postLessonCompleted model result
@@ -199,47 +157,41 @@ update msg model =
         Record ->
             ( handleGameUpdate { model | initialGameState = Just model.currentGameState } model.currentGameState, Cmd.none )
 
-        ChessMsg chessMsg ->
-            let
-                config =
-                    { toMsg = ChessMsg
-                    , onFenChanged = HandleGameUpdate
-                    }
+        RegenerateSeed currentTime ->
+            regenerateSeed currentTime model
 
-                ( updatedChessModel, chessCmd ) =
-                    Chess.update config chessMsg model.chessModel
-            in
-            ( { model | chessModel = updatedChessModel }, chessCmd )
+        SelectMode mode ->
+            selectMode mode model
 
-        WriteHint position content ->
-            case model.initialGameState of
-                Just _ ->
-                    ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+        SubmitLesson ->
+            ( { model | submitting = True }, postLessonCmd model )
 
-                _ ->
-                    ( model, Cmd.none )
+        Validate ->
+            ( model, sendPlacements model.placements )
 
         WriteDefaultMessage content ->
-            case model.initialGameState of
-                Just _ ->
-                    ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) content }, Cmd.none )
+            writeDefaultMessage content model
 
-                _ ->
-                    ( model, Cmd.none )
+        WriteHint position content ->
+            writeHint position content model
+
+
+handleChessMsg : Model -> Chess.Msg -> ( Model, Cmd Msg )
+handleChessMsg model chessMsg =
+    let
+        config =
+            { toMsg = ChessMsg
+            , onFenChanged = HandleGameUpdate
+            }
+
+        ( updatedChessModel, chessCmd ) =
+            Chess.update config chessMsg model.chessModel
+    in
+    ( { model | chessModel = updatedChessModel }, chessCmd )
 
 
 
 ---- FETCH SEED ----
-
-
-api : String -> String
-api apiEndpoint =
-    apiEndpoint ++ "/"
-
-
-findNextSeed : Time.Time -> Random.Seed
-findNextSeed fdsa =
-    Random.initialSeed <| Basics.floor <| Time.inMilliseconds fdsa
 
 
 fetchSeedCompleted : Model -> Result Http.Error Int -> ( Model, Cmd Msg )
@@ -312,6 +264,48 @@ postLessonCompleted model result =
             ( { model | submitting = False }, Cmd.none )
 
 
+regenerateSeed : Time.Time -> Model -> ( Model, Cmd Msg )
+regenerateSeed currentTime model =
+    let
+        nextSeed =
+            findNextSeed currentTime
+
+        updatedPlacements =
+            generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
+    in
+    ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
+
+
+selectMode : SupportedMode -> Model -> ( Model, Cmd Msg )
+selectMode mode model =
+    case mode of
+        ForcingMoves ->
+            ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
+
+        _ ->
+            ( { model | mode = mode, alerts = [] }, Cmd.none )
+
+
+writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
+writeDefaultMessage content model =
+    case model.initialGameState of
+        Just _ ->
+            ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) content }, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+writeHint : String -> String -> Model -> ( Model, Cmd Msg )
+writeHint position content model =
+    case model.initialGameState of
+        Just _ ->
+            ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
 
 ---- GAME UPDATE ----
 
@@ -352,6 +346,20 @@ handleGameUpdate model newFen =
         , store = updatedStore
         , currentGameState = newFen
     }
+
+
+handleSliderChange : Int -> Model -> ( Model, Cmd Msg )
+handleSliderChange pointsAllowed model =
+    let
+        updatedPlacements =
+            generate [] pointsAllowed (Random.fastForward pointsAllowed model.initialSeed)
+    in
+    ( { model
+        | pointsAllowed = pointsAllowed
+        , placements = updatedPlacements
+      }
+    , sendPlacements updatedPlacements
+    )
 
 
 saveHint : Store -> String -> String -> String -> Store
@@ -568,11 +576,7 @@ type Validation
 
 isLegal : Int -> List Placement -> Placement -> Bool
 isLegal pointsAllowed placements constructed =
-    let
-        state =
-            State placements constructed
-    in
-    List.all (\validate -> validate state == Valid)
+    List.all (\validate -> validate (State placements constructed) == Valid)
         [ squareNotOpen
         , monarchAlreadyPlaced
         , monarchsNotAdjacent
@@ -1058,6 +1062,7 @@ viewActionMenu model =
         ]
 
 
+loadingButtonAttributes : Html.Attribute msg -> String -> Bool -> List (Html.Attribute msg)
 loadingButtonAttributes clickHandler color isLoading =
     let
         displayLoading =
@@ -1072,6 +1077,20 @@ loadingButtonAttributes clickHandler color isLoading =
     , H.class color
     , H.class displayLoading
     ]
+
+
+
+---- HELPER FUNCTIONS ----
+
+
+api : String -> String
+api apiEndpoint =
+    apiEndpoint ++ "/"
+
+
+findNextSeed : Time.Time -> Random.Seed
+findNextSeed currentTime =
+    Random.initialSeed <| Basics.floor <| Time.inMilliseconds currentTime
 
 
 
