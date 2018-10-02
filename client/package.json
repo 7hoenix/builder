@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "elm-app build",
-    "dev": "ELM_APP_API_ENDPOINT=\"http://localhost:3001\" elm-app start"
+    "dev": "ELM_APP_API_ENDPOINT=\"http://localhost:3001/api\" elm-app start"
   },
   "author": "",
   "license": "ISC",

@@ -2,8 +2,8 @@ rename-session dev
 rename-window generator
 
 new-window -n deps
-send "cd builder" C-m
-send "elm-app start" C-m
+send "cd client" C-m
+send "npm run dev" C-m
 
 split-window -v
 send "cd dev-server" C-m

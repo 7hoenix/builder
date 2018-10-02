@@ -25,6 +25,7 @@ If a valid lesson is submitted, then it will be available on [Square First Chess
     npm run dev
 
 * Need to be running dev-server (or point backend wherever).
+* If you have tmux and nodemon then you are also able to use the .tmuxrc automation: `tmux source-file .tmuxrc`
 
 ## Directions for actually making a lesson
 
