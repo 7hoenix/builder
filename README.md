@@ -34,9 +34,10 @@ These are the steps that you need to take to make a lesson:
 - Use procedural generation to find original idea (either by clicking regenerate, or by moving slider).
 - Rearrange / optimize the board for the start of the lesson (**Must be legal Chess position, i.e. Monarch who's team it is may NOT be in check**).
 - Click `Record Lesson`.
-- Fill in the default text with what you want to be displayed at the beginning of that frame.
-- Optionally; click on any square to create discoverable content.
-- Make move (**Until chess api is integrated you must also know the engines next move and make that too**).
+- Create a frame
+  - Fill in the default text with what you want to be displayed at the beginning of that frame.
+  - Optionally; click on squares to create discoverable content (**Currently only supports valid moves for your team**).
+  - Make move (Use Chess Api button for opponent).
 - Repeat frame creation until satisified with lesson.
 
 Please remember that we are trying to write content that is optimized for the learner.

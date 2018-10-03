@@ -1,5 +1,6 @@
 module Builder exposing (main)
 
+import Api
 import BuilderJs
 import Char
 import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
@@ -48,7 +49,9 @@ type SupportedMode
 
 
 type alias Model =
-    { apiEndpoint : String
+    { alert : Maybe String
+    , apiEndpoint : String
+    , baseEngineUrl : String
     , mode : SupportedMode
     , store : Store
     , currentGameState : String
@@ -57,13 +60,13 @@ type alias Model =
     , placements : List Placement
     , pointsAllowed : Int
     , submitting : Bool
-    , alerts : List String
     , chessModel : Chess.State
     }
 
 
 type alias Flags =
     { apiEndpoint : String
+    , baseEngineUrl : String
     , initialSeed : Int
     }
 
@@ -89,6 +92,7 @@ init flags =
                     state
     in
     ( { apiEndpoint = flags.apiEndpoint
+      , baseEngineUrl = flags.baseEngineUrl
       , mode = Basic
       , store = Store Dict.empty
       , currentGameState = blankGameFen
@@ -97,7 +101,7 @@ init flags =
       , placements = initialPlacements
       , pointsAllowed = 1
       , submitting = False
-      , alerts = []
+      , alert = Nothing
       , chessModel = initialChessState
       }
     , sendPlacements initialPlacements
@@ -105,7 +109,7 @@ init flags =
 
 
 
--- TODO: MAKE DYNAMIC LATER
+-- TODO: SUPPORT MOBILE LATER
 
 
 findConfig : Chess.View.Board.Config
@@ -119,7 +123,9 @@ findConfig =
 
 type Msg
     = ChessMsg Chess.Msg
-    | FetchSeedCompleted (Result Http.Error Int)
+    | ClearAlert
+    | Error String
+    | FindBestMove
     | GetSeed
     | HandleGameUpdate String
     | HandleSliderChange Int
@@ -139,8 +145,17 @@ update msg model =
         ChessMsg chessMsg ->
             handleChessMsg model chessMsg
 
-        FetchSeedCompleted result ->
-            fetchSeedCompleted model result
+        ClearAlert ->
+            ( { model | alert = Nothing }, Cmd.none )
+
+        Error err ->
+            ( { model | alert = Just err }, Cmd.none )
+
+        FindBestMove ->
+            ( model
+            , Api.best model.baseEngineUrl model.currentGameState
+                |> Task.attempt (either (\err -> Error "Best move api failure") (\fen -> HandleGameUpdate fen))
+            )
 
         GetSeed ->
             ( model, Task.perform RegenerateSeed Time.now )
@@ -164,7 +179,7 @@ update msg model =
             selectMode mode model
 
         SubmitLesson ->
-            ( { model | submitting = True }, postLessonCmd model )
+            postLessonCmd { model | submitting = True }
 
         Validate ->
             ( model, sendPlacements model.placements )
@@ -211,11 +226,11 @@ fetchSeedCompleted model result =
             ( model, Cmd.none )
 
 
-postLessonCmd : Model -> Cmd Msg
-postLessonCmd { initialGameState, store, apiEndpoint } =
+postLessonCmd : Model -> ( Model, Cmd Msg )
+postLessonCmd ({ initialGameState, store, apiEndpoint } as model) =
     case initialGameState of
         Nothing ->
-            Debug.crash "NO GAME STATE, DISABLE THIS BUTTON UNTIL YOU HAVE ONE"
+            ( { model | alert = Just "NO GAME STATE" }, Cmd.none )
 
         Just gameState ->
             let
@@ -231,7 +246,7 @@ postLessonCmd { initialGameState, store, apiEndpoint } =
                 request =
                     Http.post (api apiEndpoint ++ "lessons") body (D.succeed "cake")
             in
-            Http.send PostLessonCompleted request
+            ( model, Http.send PostLessonCompleted request )
 
 
 encodeStore : Store -> E.Value
@@ -280,30 +295,41 @@ selectMode : SupportedMode -> Model -> ( Model, Cmd Msg )
 selectMode mode model =
     case mode of
         ForcingMoves ->
-            ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
+            ( { model | mode = mode, alert = Just "Coming soon! Sorry for the click bait." }, Cmd.none )
 
         _ ->
-            ( { model | mode = mode, alerts = [] }, Cmd.none )
+            ( { model | mode = mode, alert = Nothing }, Cmd.none )
 
 
 writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
 writeDefaultMessage content model =
-    case model.initialGameState of
-        Just _ ->
-            ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) content }, Cmd.none )
+    case ( model.initialGameState, findFrame model.store (findStorageKey model.currentGameState) ) of
+        ( Just _, Just frame ) ->
+            ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) frame content }, Cmd.none )
 
-        _ ->
+        ( Just _, Nothing ) ->
+            ( { model | alert = Just "You must have a frame in order to write to it." }, Cmd.none )
+
+        ( _, _ ) ->
             ( model, Cmd.none )
 
 
 writeHint : String -> String -> Model -> ( Model, Cmd Msg )
 writeHint position content model =
-    case model.initialGameState of
-        Just _ ->
-            ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+    case ( model.initialGameState, findFrame model.store (findStorageKey model.currentGameState) ) of
+        ( Just _, Just frame ) ->
+            ( { model | store = saveHint model.store (findStorageKey model.currentGameState) frame position content }, Cmd.none )
 
-        _ ->
+        ( Just _, Nothing ) ->
+            ( { model | alert = Just "You must have a frame in order to write a hint." }, Cmd.none )
+
+        ( _, _ ) ->
             ( model, Cmd.none )
+
+
+findFrame : Store -> String -> Maybe Frame
+findFrame (Store store) frameKey =
+    Dict.get frameKey store
 
 
 
@@ -312,15 +338,17 @@ writeHint position content model =
 
 handleGameUpdate : Model -> String -> Model
 handleGameUpdate model newFen =
+    case Chess.fromFen newFen of
+        Nothing ->
+            { model | alert = Just "BAD FEN" }
+
+        Just s ->
+            handleGameUpdateHelp model newFen s
+
+
+handleGameUpdateHelp : Model -> String -> Chess.State -> Model
+handleGameUpdateHelp model newFen updatedState =
     let
-        updatedState =
-            case Chess.fromFen newFen of
-                Nothing ->
-                    Debug.crash "BAD FEN"
-
-                Just s ->
-                    s
-
         blankFrame =
             Frame (Hints Dict.empty) "Click the yellow square"
 
@@ -362,20 +390,9 @@ handleSliderChange pointsAllowed model =
     )
 
 
-saveHint : Store -> String -> String -> String -> Store
-saveHint (Store store) frameKey positionKey content =
+saveHint : Store -> String -> Frame -> String -> String -> Store
+saveHint (Store store) frameKey frame positionKey content =
     let
-        maybeFrame =
-            Dict.get frameKey store
-
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
-
-                Just f ->
-                    f
-
         (Hints rawHints) =
             frame.squares
 
@@ -398,20 +415,9 @@ saveHint (Store store) frameKey positionKey content =
     Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
 
 
-saveDefaultMessage : Store -> String -> String -> Store
-saveDefaultMessage (Store store) frameKey content =
+saveDefaultMessage : Store -> String -> Frame -> String -> Store
+saveDefaultMessage (Store store) frameKey frame content =
     let
-        maybeFrame =
-            Dict.get frameKey store
-
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
-
-                Just f ->
-                    f
-
         updatedFrame =
             { frame | defaultMessage = content }
     in
@@ -866,16 +872,16 @@ viewNavbar =
 
 viewAlerts : Model -> Html Msg
 viewAlerts model =
-    case List.head model.alerts of
+    case model.alert of
         Just alert ->
-            section [ H.class "section" ]
-                [ div
-                    [ H.class "columns is-centered is-variable is-8"
-                    ]
-                    [ text alert ]
+            div
+                [ H.class "notification"
+                ]
+                [ button [ H.class "delete", onClick ClearAlert ] []
+                , text alert
                 ]
 
-        _ ->
+        Nothing ->
             div [] []
 
 
@@ -1057,6 +1063,7 @@ viewActionMenu model =
                     div [ H.class "level-item" ]
                         [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
                             [ text "Submit Lesson" ]
+                        , button [ onClick FindBestMove ] [ text "Find Best Move" ]
                         ]
             ]
         ]
@@ -1093,6 +1100,16 @@ findNextSeed currentTime =
     Random.initialSeed <| Basics.floor <| Time.inMilliseconds currentTime
 
 
+either : (x -> b) -> (a -> b) -> Result x a -> b
+either fromError fromOk result =
+    case result of
+        Err x ->
+            fromError x
+
+        Ok a ->
+            fromOk a
+
+
 
 ---- SUBSCRIPTIONS ----
 
@@ -1116,7 +1133,7 @@ decodeFen value =
             HandleGameUpdate fen
 
         Err error ->
-            Debug.crash ("fen decoding failed: " ++ error)
+            Error ("fen decoding failed: " ++ error)
 
 
 

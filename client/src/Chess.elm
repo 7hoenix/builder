@@ -57,14 +57,6 @@ type alias DraggableItem =
     }
 
 
-type alias Move =
-    { from : Position
-    , to : Position
-    , player : Player
-    , piece : Piece
-    }
-
-
 {-| -}
 fromFen : String -> Maybe State
 fromFen fen =
@@ -99,10 +91,10 @@ getSquaresSelected (State state) =
 
 {-| -}
 type Msg
-    = SetHover Position
-    | SelectSquare Position
-    | DragMsg (Drag.Msg DraggableItem)
+    = DragMsg (Drag.Msg DraggableItem)
     | FinalRelease DraggableItem
+    | SelectSquare Position
+    | SetHover Position
 
 
 type alias Config msg =
@@ -115,12 +107,6 @@ type alias Config msg =
 update : Config msg -> Msg -> State -> ( State, Cmd msg )
 update config msg (State state) =
     case msg of
-        SetHover position ->
-            ( State { state | hover = Just position }, Cmd.none )
-
-        SelectSquare position ->
-            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
-
         DragMsg dragMsg ->
             Drag.update dragConfig dragMsg state.drag
                 |> Tuple.mapFirst (\drag -> State { state | drag = drag })
@@ -140,6 +126,12 @@ update config msg (State state) =
                     , Task.succeed (Chess.Data.Board.toFen board)
                         |> Task.perform config.onFenChanged
                     )
+
+        SetHover position ->
+            ( State { state | hover = Just position }, Cmd.none )
+
+        SelectSquare position ->
+            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
 
 
 dragConfig : Drag.Config DraggableItem Msg
@@ -266,3 +258,13 @@ animateDrag position drag =
 
     else
         []
+
+
+either : (x -> b) -> (a -> b) -> Result x a -> b
+either fromError fromOk result =
+    case result of
+        Err x ->
+            fromError x
+
+        Ok a ->
+            fromOk a
