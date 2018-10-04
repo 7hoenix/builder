@@ -152,10 +152,7 @@ update msg model =
             ( { model | alert = Just err }, Cmd.none )
 
         FindBestMove ->
-            ( model
-            , Api.best model.baseEngineUrl model.currentGameState
-                |> Task.attempt (either (\err -> Error "Best move api failure") (\fen -> HandleGameUpdate fen))
-            )
+            findBestMove model
 
         GetSeed ->
             ( model, Task.perform RegenerateSeed Time.now )
@@ -330,6 +327,18 @@ writeHint position content model =
 findFrame : Store -> String -> Maybe Frame
 findFrame (Store store) frameKey =
     Dict.get frameKey store
+
+
+findBestMove : Model -> ( Model, Cmd Msg )
+findBestMove model =
+    ( model
+    , Api.best model.baseEngineUrl model.currentGameState
+        |> Task.attempt
+            (either
+                (\err -> Error "Best move api failure")
+                (\fen -> HandleGameUpdate fen)
+            )
+    )
 
 
 
@@ -818,6 +827,7 @@ view model =
                         , viewHints model
                         , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
                         , makeSlider model
+                        , viewTurn model
                         , viewActionMenu model
                         ]
                     ]
@@ -907,6 +917,32 @@ radio msg buttonText name isChecked =
         [ input [ type_ "radio", H.name name, onClick msg, H.checked isChecked ] []
         , text buttonText
         ]
+
+
+viewTurn : Model -> Html Msg
+viewTurn model =
+    case model.initialGameState of
+        Nothing ->
+            div [] []
+
+        Just currentGame ->
+            div []
+                [ h3 [ H.class "subtitle is-5" ] [ text "Turn" ]
+                , text <| toString <| findTeam model.currentGameState
+                ]
+
+
+findTeam : String -> Player
+findTeam currentGame =
+    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
+        Just "w" ->
+            White
+
+        Just "b" ->
+            Black
+
+        _ ->
+            Debug.crash "fix me"
 
 
 makeSlider : Model -> Html Msg

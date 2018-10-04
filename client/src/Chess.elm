@@ -44,6 +44,7 @@ import Task
 type State
     = State
         { board : Board
+        , team : Player
         , drag : Drag.State DraggableItem
         , hover : Maybe Position
         , squaresSelected : List Position
@@ -68,6 +69,7 @@ fromFen fen =
             Just <|
                 State
                     { board = board
+                    , team = findTeam fen
                     , hover = Nothing
                     , drag =
                         { subject = Nothing
@@ -121,9 +123,12 @@ update config msg (State state) =
                     let
                         board =
                             makeMove from to state.board
+
+                        updatedTeam =
+                            nextTeam state.team
                     in
-                    ( State { state | board = board }
-                    , Task.succeed (Chess.Data.Board.toFen board)
+                    ( State { state | board = board, team = updatedTeam }
+                    , Task.succeed (Chess.Data.Board.toFen board updatedTeam)
                         |> Task.perform config.onFenChanged
                     )
 
@@ -268,3 +273,26 @@ either fromError fromOk result =
 
         Ok a ->
             fromOk a
+
+
+findTeam : String -> Player
+findTeam currentGame =
+    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
+        Just "w" ->
+            White
+
+        Just "b" ->
+            Black
+
+        _ ->
+            Debug.crash "fix me"
+
+
+nextTeam : Player -> Player
+nextTeam player =
+    case player of
+        White ->
+            Black
+
+        Black ->
+            White
