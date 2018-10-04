@@ -14,9 +14,9 @@ If a valid lesson is submitted, then it will be available on [Square First Chess
 
     elm-app install
 
-* Must have [Elm](https://guide.elm-lang.org/install.html) and [create-elm-app](https://github.com/halfzebra/create-elm-app) installed (can also `elm-app eject` if you are more familiar with webpack).
-* Current Elm version is `0.18`.
-* Current create-elm-app version is `v1.10.4` (npm install create-elm-app@v1.10.4)
+- Must have [Elm](https://guide.elm-lang.org/install.html) and [create-elm-app](https://github.com/halfzebra/create-elm-app) installed (can also `elm-app eject` if you are more familiar with webpack).
+  - Current Elm version is `0.18`.
+  - Current create-elm-app version is `v1.10.4` (npm install create-elm-app@v1.10.4)
 
 ## Usage
 
@@ -50,4 +50,4 @@ Use the Terraform script.
 
 - Integrate with chess api
   - Check for legal position
-  - Show what engine would do when you make a move (Should also add custom type in Square First Chess app to support over rides)
+  - Show possible moves in builder
