@@ -1,8 +1,9 @@
 import { Builder } from "./Builder.elm";
 
-export function builder(chess, apiEndpoint, seed) {
+export function builder(chess, apiEndpoint, baseEngineUrl, seed) {
   const app = Builder.embed(document.getElementById("root"), {
     apiEndpoint: apiEndpoint,
+    baseEngineUrl: baseEngineUrl,
     initialSeed: seed
   });
 

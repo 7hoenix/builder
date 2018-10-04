@@ -1,5 +1,6 @@
 module Builder exposing (main)
 
+import Api
 import BuilderJs
 import Char
 import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
@@ -7,7 +8,7 @@ import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, input, label, nav, section, span, text)
+import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, h4, h5, input, label, nav, p, section, span, text)
 import Html.Attributes as H exposing (defaultValue, href, max, min, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, jsonBody)
@@ -48,7 +49,9 @@ type SupportedMode
 
 
 type alias Model =
-    { apiEndpoint : String
+    { alert : Maybe String
+    , apiEndpoint : String
+    , baseEngineUrl : String
     , mode : SupportedMode
     , store : Store
     , currentGameState : String
@@ -57,25 +60,27 @@ type alias Model =
     , placements : List Placement
     , pointsAllowed : Int
     , submitting : Bool
-    , alerts : List String
     , chessModel : Chess.State
     }
 
 
 type alias Flags =
     { apiEndpoint : String
+    , baseEngineUrl : String
     , initialSeed : Int
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    let
-        initialSeed =
-            Random.initialSeed flags.initialSeed
+    blankState (Random.initialSeed flags.initialSeed) 1 flags.apiEndpoint flags.baseEngineUrl
 
+
+blankState : Random.Seed -> Int -> String -> String -> ( Model, Cmd Msg )
+blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
+    let
         initialPlacements =
-            generate [] 1 initialSeed
+            generate [] pointsAllowed initialSeed
 
         blankGameFen =
             "8/8/8/8/8/8/8/8 w - - 0 0"
@@ -88,7 +93,8 @@ init flags =
                 Just state ->
                     state
     in
-    ( { apiEndpoint = flags.apiEndpoint
+    ( { apiEndpoint = apiEndpoint
+      , baseEngineUrl = baseEngineUrl
       , mode = Basic
       , store = Store Dict.empty
       , currentGameState = blankGameFen
@@ -97,7 +103,7 @@ init flags =
       , placements = initialPlacements
       , pointsAllowed = 1
       , submitting = False
-      , alerts = []
+      , alert = Nothing
       , chessModel = initialChessState
       }
     , sendPlacements initialPlacements
@@ -105,7 +111,7 @@ init flags =
 
 
 
--- TODO: MAKE DYNAMIC LATER
+-- TODO: SUPPORT MOBILE LATER
 
 
 findConfig : Chess.View.Board.Config
@@ -119,13 +125,16 @@ findConfig =
 
 type Msg
     = ChessMsg Chess.Msg
-    | FetchSeedCompleted (Result Http.Error Int)
+    | ClearAlert
+    | Error String
+    | FindBestMove
     | GetSeed
     | HandleGameUpdate String
     | HandleSliderChange Int
     | PostLessonCompleted (Result Http.Error String)
     | Record
     | RegenerateSeed Time.Time
+    | Reset
     | SelectMode SupportedMode
     | SubmitLesson
     | Validate
@@ -139,8 +148,14 @@ update msg model =
         ChessMsg chessMsg ->
             handleChessMsg model chessMsg
 
-        FetchSeedCompleted result ->
-            fetchSeedCompleted model result
+        ClearAlert ->
+            ( { model | alert = Nothing }, Cmd.none )
+
+        Error err ->
+            ( { model | alert = Just err }, Cmd.none )
+
+        FindBestMove ->
+            findBestMove model
 
         GetSeed ->
             ( model, Task.perform RegenerateSeed Time.now )
@@ -160,11 +175,14 @@ update msg model =
         RegenerateSeed currentTime ->
             regenerateSeed currentTime model
 
+        Reset ->
+            blankState model.initialSeed model.pointsAllowed model.apiEndpoint model.baseEngineUrl
+
         SelectMode mode ->
             selectMode mode model
 
         SubmitLesson ->
-            ( { model | submitting = True }, postLessonCmd model )
+            postLessonCmd { model | submitting = True }
 
         Validate ->
             ( model, sendPlacements model.placements )
@@ -211,11 +229,11 @@ fetchSeedCompleted model result =
             ( model, Cmd.none )
 
 
-postLessonCmd : Model -> Cmd Msg
-postLessonCmd { initialGameState, store, apiEndpoint } =
+postLessonCmd : Model -> ( Model, Cmd Msg )
+postLessonCmd ({ initialGameState, store, apiEndpoint } as model) =
     case initialGameState of
         Nothing ->
-            Debug.crash "NO GAME STATE, DISABLE THIS BUTTON UNTIL YOU HAVE ONE"
+            ( { model | alert = Just "NO GAME STATE" }, Cmd.none )
 
         Just gameState ->
             let
@@ -231,7 +249,7 @@ postLessonCmd { initialGameState, store, apiEndpoint } =
                 request =
                     Http.post (api apiEndpoint ++ "lessons") body (D.succeed "cake")
             in
-            Http.send PostLessonCompleted request
+            ( model, Http.send PostLessonCompleted request )
 
 
 encodeStore : Store -> E.Value
@@ -279,31 +297,54 @@ regenerateSeed currentTime model =
 selectMode : SupportedMode -> Model -> ( Model, Cmd Msg )
 selectMode mode model =
     case mode of
-        ForcingMoves ->
-            ( { model | mode = mode, alerts = List.concat [ [ "Coming soon! Sorry for the click bait." ], model.alerts ] }, Cmd.none )
+        Basic ->
+            ( { model | mode = mode, alert = Nothing }, Cmd.none )
 
-        _ ->
-            ( { model | mode = mode, alerts = [] }, Cmd.none )
+        ForcingMoves ->
+            ( { model | mode = mode, alert = Just "Coming soon!" }, Cmd.none )
 
 
 writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
 writeDefaultMessage content model =
-    case model.initialGameState of
-        Just _ ->
-            ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) content }, Cmd.none )
+    case ( model.initialGameState, findFrame model.store (findStorageKey model.currentGameState) ) of
+        ( Just _, Just frame ) ->
+            ( { model | store = saveDefaultMessage model.store (findStorageKey model.currentGameState) frame content }, Cmd.none )
 
-        _ ->
+        ( Just _, Nothing ) ->
+            ( { model | alert = Just "You must have a frame in order to write to it." }, Cmd.none )
+
+        ( _, _ ) ->
             ( model, Cmd.none )
 
 
 writeHint : String -> String -> Model -> ( Model, Cmd Msg )
 writeHint position content model =
-    case model.initialGameState of
-        Just _ ->
-            ( { model | store = saveHint model.store (findStorageKey model.currentGameState) position content }, Cmd.none )
+    case ( model.initialGameState, findFrame model.store (findStorageKey model.currentGameState) ) of
+        ( Just _, Just frame ) ->
+            ( { model | store = saveHint model.store (findStorageKey model.currentGameState) frame position content }, Cmd.none )
 
-        _ ->
+        ( Just _, Nothing ) ->
+            ( { model | alert = Just "You must have a frame in order to write a hint." }, Cmd.none )
+
+        ( _, _ ) ->
             ( model, Cmd.none )
+
+
+findFrame : Store -> String -> Maybe Frame
+findFrame (Store store) frameKey =
+    Dict.get frameKey store
+
+
+findBestMove : Model -> ( Model, Cmd Msg )
+findBestMove model =
+    ( model
+    , Api.best model.baseEngineUrl model.currentGameState
+        |> Task.attempt
+            (either
+                (\err -> Error "Best move api failure")
+                (\fen -> HandleGameUpdate fen)
+            )
+    )
 
 
 
@@ -312,15 +353,17 @@ writeHint position content model =
 
 handleGameUpdate : Model -> String -> Model
 handleGameUpdate model newFen =
+    case Chess.fromFen newFen of
+        Nothing ->
+            { model | alert = Just "BAD FEN" }
+
+        Just s ->
+            handleGameUpdateHelp model newFen s
+
+
+handleGameUpdateHelp : Model -> String -> Chess.State -> Model
+handleGameUpdateHelp model newFen updatedState =
     let
-        updatedState =
-            case Chess.fromFen newFen of
-                Nothing ->
-                    Debug.crash "BAD FEN"
-
-                Just s ->
-                    s
-
         blankFrame =
             Frame (Hints Dict.empty) "Click the yellow square"
 
@@ -362,20 +405,9 @@ handleSliderChange pointsAllowed model =
     )
 
 
-saveHint : Store -> String -> String -> String -> Store
-saveHint (Store store) frameKey positionKey content =
+saveHint : Store -> String -> Frame -> String -> String -> Store
+saveHint (Store store) frameKey frame positionKey content =
     let
-        maybeFrame =
-            Dict.get frameKey store
-
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
-
-                Just f ->
-                    f
-
         (Hints rawHints) =
             frame.squares
 
@@ -398,20 +430,9 @@ saveHint (Store store) frameKey positionKey content =
     Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
 
 
-saveDefaultMessage : Store -> String -> String -> Store
-saveDefaultMessage (Store store) frameKey content =
+saveDefaultMessage : Store -> String -> Frame -> String -> Store
+saveDefaultMessage (Store store) frameKey frame content =
     let
-        maybeFrame =
-            Dict.get frameKey store
-
-        frame =
-            case maybeFrame of
-                Nothing ->
-                    Debug.crash "impossible state is not impossible :("
-
-                Just f ->
-                    f
-
         updatedFrame =
             { frame | defaultMessage = content }
     in
@@ -790,7 +811,7 @@ teamGenerator =
 view : Model -> Html Msg
 view model =
     div []
-        [ viewNavbar
+        [ viewNavbar model
         , viewAlerts model
         , section [ H.class "section" ]
             [ div [ H.class "container" ]
@@ -807,12 +828,7 @@ view model =
                             ]
                         ]
                     , div [ H.class "column is-narrow has-text-centered" ]
-                        [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
-                        , viewModeSelection model
-                        , viewHints model
-                        , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
-                        , makeSlider model
-                        , viewActionMenu model
+                        [ viewSidebar model
                         ]
                     ]
                 ]
@@ -820,15 +836,15 @@ view model =
         ]
 
 
-viewNavbar : Html Msg
-viewNavbar =
+viewNavbar : Model -> Html Msg
+viewNavbar model =
     nav
         [ H.class "navbar has-shadow is-spaced" ]
         [ div [ H.class "container" ]
             [ div [ H.class "navbar-brand" ]
                 [ a
                     [ H.class "navbar-item"
-                    , H.href "https://github.com/7hoenix/procedural-gen"
+                    , H.href "https://github.com/7hoenix/builder"
                     , H.target "_blank"
                     ]
                     [ h1 [ H.class "title" ] [ text "Builder" ]
@@ -854,7 +870,14 @@ viewNavbar =
                 [ div [ H.class "navbar-start" ]
                     [ a [ H.class "button", href "http://beta.chesstrained.com/#/simulation" ] [ text "Try it out" ]
                     ]
-                , div [ H.class "navbar-end" ] []
+                , div [ H.class "navbar-end" ]
+                    [ case model.initialGameState of
+                        Nothing ->
+                            p [] [ text "" ]
+
+                        Just _ ->
+                            p [ H.class "title is-5" ] [ text ("Level " ++ toString model.pointsAllowed ++ ", Basic") ]
+                    ]
                 ]
             ]
         ]
@@ -866,33 +889,53 @@ viewNavbar =
 
 viewAlerts : Model -> Html Msg
 viewAlerts model =
-    case List.head model.alerts of
+    case model.alert of
         Just alert ->
-            section [ H.class "section" ]
-                [ div
-                    [ H.class "columns is-centered is-variable is-8"
-                    ]
-                    [ text alert ]
+            div
+                [ H.class "notification"
+                ]
+                [ button [ H.class "delete", onClick ClearAlert ] []
+                , text alert
                 ]
 
-        _ ->
+        Nothing ->
             div [] []
 
 
 
----- MODESELECTION ----
+---- SIDEBAR ----
 
 
-viewModeSelection : Model -> Html Msg
-viewModeSelection model =
+viewSidebar : Model -> Html Msg
+viewSidebar model =
+    div []
+        [ viewMode model
+        , viewSlider model
+        , viewLesson model
+        , viewActionMenu model
+        ]
+
+
+
+---- MODE ----
+
+
+viewMode : Model -> Html Msg
+viewMode model =
     let
+        isChecked : SupportedMode -> Bool
         isChecked =
             \x -> model.mode == x
     in
-    div [ H.class "box", H.class "control" ]
-        [ radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
-        , radio (SelectMode ForcingMoves) " Forcing Moves" "mode" (isChecked ForcingMoves)
-        ]
+    case model.initialGameState of
+        Nothing ->
+            div [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
+                , radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+                ]
+
+        Just _ ->
+            text ""
 
 
 radio : msg -> String -> String -> Bool -> Html msg
@@ -903,20 +946,17 @@ radio msg buttonText name isChecked =
         ]
 
 
-makeSlider : Model -> Html Msg
-makeSlider model =
-    div []
-        [ text "1  "
-        , input
-            [ type_ "range"
-            , H.min "1"
-            , H.max "10"
-            , defaultValue <| toString model.pointsAllowed
-            , on "input" (targetValue |> D.andThen parseInt)
-            ]
-            []
-        , text "  10"
-        ]
+findTeam : String -> Player
+findTeam currentGame =
+    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
+        Just "w" ->
+            White
+
+        Just "b" ->
+            Black
+
+        _ ->
+            Debug.crash "fix me"
 
 
 parseInt : String -> D.Decoder Msg
@@ -933,8 +973,8 @@ parseInt rawString =
 ---- HINTS ----
 
 
-viewHints : Model -> Html Msg
-viewHints model =
+viewLesson : Model -> Html Msg
+viewLesson model =
     let
         maybeFrame =
             getFrame model.store model.currentGameState
@@ -944,8 +984,10 @@ viewHints model =
             text ""
 
         Just frame ->
-            div []
-                [ h3 [ H.class "subtitle is-5" ] [ text "Square Hints" ]
+            div [ H.class "box", H.class "control" ]
+                [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ]
+                , button [ onClick FindBestMove, H.class "button is-small" ] [ text "Find Best Move" ]
+                , div [] [ text <| "Turn: " ++ (toString <| findTeam model.currentGameState) ]
                 , div [] [ input [ H.placeholder "The enemies gate is down", H.value frame.defaultMessage, Html.Events.onInput WriteDefaultMessage ] [] ]
                 , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
                 ]
@@ -959,6 +1001,45 @@ getFrameHints store gameState =
 getFrame : Store -> String -> Maybe Frame
 getFrame (Store store) gameState =
     Dict.get (findStorageKey gameState) store
+
+
+viewSlider : Model -> Html Msg
+viewSlider model =
+    case model.initialGameState of
+        Just _ ->
+            text ""
+
+        Nothing ->
+            div
+                [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
+                , makeSlider model
+                ]
+
+
+makeSlider : Model -> Html Msg
+makeSlider model =
+    case model.initialGameState of
+        Nothing ->
+            div []
+                [ text "1  "
+                , input
+                    [ type_ "range"
+                    , H.min "1"
+                    , H.max "10"
+                    , defaultValue <| toString model.pointsAllowed
+                    , on "input" (targetValue |> D.andThen parseInt)
+                    ]
+                    []
+                , text "  10"
+                ]
+
+        Just _ ->
+            div []
+                [ text <|
+                    toString model.pointsAllowed
+                        ++ " Points of Material Allowed"
+                ]
 
 
 
@@ -1048,15 +1129,17 @@ viewActionMenu : Model -> Html Msg
 viewActionMenu model =
     div []
         [ div [ H.class "level" ]
-            [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
-            , case model.initialGameState of
+            [ case model.initialGameState of
                 Nothing ->
-                    div [ H.class "level-item" ] [ button [ onClick Record, H.class "button is-info" ] [ text "Start Recording" ] ]
+                    div [ H.class "level-item" ]
+                        [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ]
+                        , button [ onClick Record, H.class "button is-info" ] [ text "Start Recording" ]
+                        ]
 
                 Just _ ->
                     div [ H.class "level-item" ]
-                        [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
-                            [ text "Submit Lesson" ]
+                        [ button [ H.class "button is-danger", onClick Reset ] [ text "Reset" ]
+                        , button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting) [ text "Submit Lesson" ]
                         ]
             ]
         ]
@@ -1093,6 +1176,16 @@ findNextSeed currentTime =
     Random.initialSeed <| Basics.floor <| Time.inMilliseconds currentTime
 
 
+either : (x -> b) -> (a -> b) -> Result x a -> b
+either fromError fromOk result =
+    case result of
+        Err x ->
+            fromError x
+
+        Ok a ->
+            fromOk a
+
+
 
 ---- SUBSCRIPTIONS ----
 
@@ -1116,7 +1209,7 @@ decodeFen value =
             HandleGameUpdate fen
 
         Err error ->
-            Debug.crash ("fen decoding failed: " ++ error)
+            Error ("fen decoding failed: " ++ error)
 
 
 

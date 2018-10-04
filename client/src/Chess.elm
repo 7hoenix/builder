@@ -44,6 +44,7 @@ import Task
 type State
     = State
         { board : Board
+        , team : Player
         , drag : Drag.State DraggableItem
         , hover : Maybe Position
         , squaresSelected : List Position
@@ -52,14 +53,6 @@ type State
 
 type alias DraggableItem =
     { position : Position
-    , player : Player
-    , piece : Piece
-    }
-
-
-type alias Move =
-    { from : Position
-    , to : Position
     , player : Player
     , piece : Piece
     }
@@ -76,6 +69,7 @@ fromFen fen =
             Just <|
                 State
                     { board = board
+                    , team = findTeam fen
                     , hover = Nothing
                     , drag =
                         { subject = Nothing
@@ -99,10 +93,10 @@ getSquaresSelected (State state) =
 
 {-| -}
 type Msg
-    = SetHover Position
-    | SelectSquare Position
-    | DragMsg (Drag.Msg DraggableItem)
+    = DragMsg (Drag.Msg DraggableItem)
     | FinalRelease DraggableItem
+    | SelectSquare Position
+    | SetHover Position
 
 
 type alias Config msg =
@@ -115,12 +109,6 @@ type alias Config msg =
 update : Config msg -> Msg -> State -> ( State, Cmd msg )
 update config msg (State state) =
     case msg of
-        SetHover position ->
-            ( State { state | hover = Just position }, Cmd.none )
-
-        SelectSquare position ->
-            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
-
         DragMsg dragMsg ->
             Drag.update dragConfig dragMsg state.drag
                 |> Tuple.mapFirst (\drag -> State { state | drag = drag })
@@ -135,11 +123,20 @@ update config msg (State state) =
                     let
                         board =
                             makeMove from to state.board
+
+                        updatedTeam =
+                            nextTeam state.team
                     in
-                    ( State { state | board = board }
-                    , Task.succeed (Chess.Data.Board.toFen board)
+                    ( State { state | board = board, team = updatedTeam }
+                    , Task.succeed (Chess.Data.Board.toFen board updatedTeam)
                         |> Task.perform config.onFenChanged
                     )
+
+        SetHover position ->
+            ( State { state | hover = Just position }, Cmd.none )
+
+        SelectSquare position ->
+            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
 
 
 dragConfig : Drag.Config DraggableItem Msg
@@ -266,3 +263,36 @@ animateDrag position drag =
 
     else
         []
+
+
+either : (x -> b) -> (a -> b) -> Result x a -> b
+either fromError fromOk result =
+    case result of
+        Err x ->
+            fromError x
+
+        Ok a ->
+            fromOk a
+
+
+findTeam : String -> Player
+findTeam currentGame =
+    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
+        Just "w" ->
+            White
+
+        Just "b" ->
+            Black
+
+        _ ->
+            Debug.crash "fix me"
+
+
+nextTeam : Player -> Player
+nextTeam player =
+    case player of
+        White ->
+            Black
+
+        Black ->
+            White
