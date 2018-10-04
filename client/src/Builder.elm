@@ -8,7 +8,7 @@ import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, input, label, nav, section, span, text)
+import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, h4, h5, input, label, nav, p, section, span, text)
 import Html.Attributes as H exposing (defaultValue, href, max, min, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, jsonBody)
@@ -291,11 +291,11 @@ regenerateSeed currentTime model =
 selectMode : SupportedMode -> Model -> ( Model, Cmd Msg )
 selectMode mode model =
     case mode of
-        ForcingMoves ->
-            ( { model | mode = mode, alert = Just "Coming soon! Sorry for the click bait." }, Cmd.none )
-
-        _ ->
+        Basic ->
             ( { model | mode = mode, alert = Nothing }, Cmd.none )
+
+        ForcingMoves ->
+            ( { model | mode = mode, alert = Just "Coming soon!" }, Cmd.none )
 
 
 writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
@@ -805,7 +805,7 @@ teamGenerator =
 view : Model -> Html Msg
 view model =
     div []
-        [ viewNavbar
+        [ viewNavbar model
         , viewAlerts model
         , section [ H.class "section" ]
             [ div [ H.class "container" ]
@@ -822,13 +822,7 @@ view model =
                             ]
                         ]
                     , div [ H.class "column is-narrow has-text-centered" ]
-                        [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
-                        , viewModeSelection model
-                        , viewHints model
-                        , h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
-                        , makeSlider model
-                        , viewTurn model
-                        , viewActionMenu model
+                        [ viewSidebar model
                         ]
                     ]
                 ]
@@ -836,15 +830,15 @@ view model =
         ]
 
 
-viewNavbar : Html Msg
-viewNavbar =
+viewNavbar : Model -> Html Msg
+viewNavbar model =
     nav
         [ H.class "navbar has-shadow is-spaced" ]
         [ div [ H.class "container" ]
             [ div [ H.class "navbar-brand" ]
                 [ a
                     [ H.class "navbar-item"
-                    , H.href "https://github.com/7hoenix/procedural-gen"
+                    , H.href "https://github.com/7hoenix/builder"
                     , H.target "_blank"
                     ]
                     [ h1 [ H.class "title" ] [ text "Builder" ]
@@ -870,7 +864,14 @@ viewNavbar =
                 [ div [ H.class "navbar-start" ]
                     [ a [ H.class "button", href "http://beta.chesstrained.com/#/simulation" ] [ text "Try it out" ]
                     ]
-                , div [ H.class "navbar-end" ] []
+                , div [ H.class "navbar-end" ]
+                    [ case model.initialGameState of
+                        Nothing ->
+                            p [] [ text "" ]
+
+                        Just _ ->
+                            p [ H.class "title is-5" ] [ text ("Level " ++ toString model.pointsAllowed ++ ", Basic") ]
+                    ]
                 ]
             ]
         ]
@@ -896,19 +897,39 @@ viewAlerts model =
 
 
 
----- MODESELECTION ----
+---- SIDEBAR ----
 
 
-viewModeSelection : Model -> Html Msg
-viewModeSelection model =
+viewSidebar : Model -> Html Msg
+viewSidebar model =
+    div []
+        [ viewMode model
+        , viewSlider model
+        , viewLesson model
+        , viewActionMenu model
+        ]
+
+
+
+---- MODE ----
+
+
+viewMode : Model -> Html Msg
+viewMode model =
     let
+        isChecked : SupportedMode -> Bool
         isChecked =
             \x -> model.mode == x
     in
-    div [ H.class "box", H.class "control" ]
-        [ radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
-        , radio (SelectMode ForcingMoves) " Forcing Moves" "mode" (isChecked ForcingMoves)
-        ]
+    case model.initialGameState of
+        Nothing ->
+            div [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
+                , radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+                ]
+
+        Just _ ->
+            text ""
 
 
 radio : msg -> String -> String -> Bool -> Html msg
@@ -917,19 +938,6 @@ radio msg buttonText name isChecked =
         [ input [ type_ "radio", H.name name, onClick msg, H.checked isChecked ] []
         , text buttonText
         ]
-
-
-viewTurn : Model -> Html Msg
-viewTurn model =
-    case model.initialGameState of
-        Nothing ->
-            div [] []
-
-        Just currentGame ->
-            div []
-                [ h3 [ H.class "subtitle is-5" ] [ text "Turn" ]
-                , text <| toString <| findTeam model.currentGameState
-                ]
 
 
 findTeam : String -> Player
@@ -943,22 +951,6 @@ findTeam currentGame =
 
         _ ->
             Debug.crash "fix me"
-
-
-makeSlider : Model -> Html Msg
-makeSlider model =
-    div []
-        [ text "1  "
-        , input
-            [ type_ "range"
-            , H.min "1"
-            , H.max "10"
-            , defaultValue <| toString model.pointsAllowed
-            , on "input" (targetValue |> D.andThen parseInt)
-            ]
-            []
-        , text "  10"
-        ]
 
 
 parseInt : String -> D.Decoder Msg
@@ -975,8 +967,8 @@ parseInt rawString =
 ---- HINTS ----
 
 
-viewHints : Model -> Html Msg
-viewHints model =
+viewLesson : Model -> Html Msg
+viewLesson model =
     let
         maybeFrame =
             getFrame model.store model.currentGameState
@@ -986,8 +978,9 @@ viewHints model =
             text ""
 
         Just frame ->
-            div []
-                [ h3 [ H.class "subtitle is-5" ] [ text "Square Hints" ]
+            div [ H.class "box", H.class "control" ]
+                [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ]
+                , text <| "Turn: " ++ (toString <| findTeam model.currentGameState)
                 , div [] [ input [ H.placeholder "The enemies gate is down", H.value frame.defaultMessage, Html.Events.onInput WriteDefaultMessage ] [] ]
                 , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
                 ]
@@ -1001,6 +994,45 @@ getFrameHints store gameState =
 getFrame : Store -> String -> Maybe Frame
 getFrame (Store store) gameState =
     Dict.get (findStorageKey gameState) store
+
+
+viewSlider : Model -> Html Msg
+viewSlider model =
+    case model.initialGameState of
+        Just _ ->
+            text ""
+
+        Nothing ->
+            div
+                [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Current Level" ]
+                , makeSlider model
+                ]
+
+
+makeSlider : Model -> Html Msg
+makeSlider model =
+    case model.initialGameState of
+        Nothing ->
+            div []
+                [ text "1  "
+                , input
+                    [ type_ "range"
+                    , H.min "1"
+                    , H.max "10"
+                    , defaultValue <| toString model.pointsAllowed
+                    , on "input" (targetValue |> D.andThen parseInt)
+                    ]
+                    []
+                , text "  10"
+                ]
+
+        Just _ ->
+            div []
+                [ text <|
+                    toString model.pointsAllowed
+                        ++ " Points of Material Allowed"
+                ]
 
 
 
@@ -1090,10 +1122,12 @@ viewActionMenu : Model -> Html Msg
 viewActionMenu model =
     div []
         [ div [ H.class "level" ]
-            [ div [ H.class "level-item" ] [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ] ]
-            , case model.initialGameState of
+            [ case model.initialGameState of
                 Nothing ->
-                    div [ H.class "level-item" ] [ button [ onClick Record, H.class "button is-info" ] [ text "Start Recording" ] ]
+                    div [ H.class "level-item" ]
+                        [ button [ onClick GetSeed, H.class "button is-primary" ] [ text "Regenerate" ]
+                        , button [ onClick Record, H.class "button is-info" ] [ text "Start Recording" ]
+                        ]
 
                 Just _ ->
                     div [ H.class "level-item" ]
