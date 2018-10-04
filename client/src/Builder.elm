@@ -73,12 +73,14 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    let
-        initialSeed =
-            Random.initialSeed flags.initialSeed
+    blankState (Random.initialSeed flags.initialSeed) 1 flags.apiEndpoint flags.baseEngineUrl
 
+
+blankState : Random.Seed -> Int -> String -> String -> ( Model, Cmd Msg )
+blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
+    let
         initialPlacements =
-            generate [] 1 initialSeed
+            generate [] pointsAllowed initialSeed
 
         blankGameFen =
             "8/8/8/8/8/8/8/8 w - - 0 0"
@@ -91,8 +93,8 @@ init flags =
                 Just state ->
                     state
     in
-    ( { apiEndpoint = flags.apiEndpoint
-      , baseEngineUrl = flags.baseEngineUrl
+    ( { apiEndpoint = apiEndpoint
+      , baseEngineUrl = baseEngineUrl
       , mode = Basic
       , store = Store Dict.empty
       , currentGameState = blankGameFen
@@ -132,6 +134,7 @@ type Msg
     | PostLessonCompleted (Result Http.Error String)
     | Record
     | RegenerateSeed Time.Time
+    | Reset
     | SelectMode SupportedMode
     | SubmitLesson
     | Validate
@@ -171,6 +174,9 @@ update msg model =
 
         RegenerateSeed currentTime ->
             regenerateSeed currentTime model
+
+        Reset ->
+            blankState model.initialSeed model.pointsAllowed model.apiEndpoint model.baseEngineUrl
 
         SelectMode mode ->
             selectMode mode model
@@ -980,7 +986,8 @@ viewLesson model =
         Just frame ->
             div [ H.class "box", H.class "control" ]
                 [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ]
-                , text <| "Turn: " ++ (toString <| findTeam model.currentGameState)
+                , button [ onClick FindBestMove, H.class "button is-small" ] [ text "Find Best Move" ]
+                , div [] [ text <| "Turn: " ++ (toString <| findTeam model.currentGameState) ]
                 , div [] [ input [ H.placeholder "The enemies gate is down", H.value frame.defaultMessage, Html.Events.onInput WriteDefaultMessage ] [] ]
                 , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
                 ]
@@ -1131,9 +1138,8 @@ viewActionMenu model =
 
                 Just _ ->
                     div [ H.class "level-item" ]
-                        [ button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting)
-                            [ text "Submit Lesson" ]
-                        , button [ onClick FindBestMove ] [ text "Find Best Move" ]
+                        [ button [ H.class "button is-danger", onClick Reset ] [ text "Reset" ]
+                        , button (loadingButtonAttributes (onClick SubmitLesson) "is-info" model.submitting) [ text "Submit Lesson" ]
                         ]
             ]
         ]
