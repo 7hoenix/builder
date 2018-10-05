@@ -8,7 +8,7 @@ import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, h4, h5, input, label, nav, p, section, span, text)
+import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, h4, h5, input, label, nav, p, section, span, text, textarea)
 import Html.Attributes as H exposing (defaultValue, href, max, min, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, jsonBody)
@@ -365,7 +365,7 @@ handleGameUpdateHelp : Model -> String -> Chess.State -> Model
 handleGameUpdateHelp model newFen updatedState =
     let
         blankFrame =
-            Frame (Hints Dict.empty) "Click the yellow square"
+            Frame (Hints Dict.empty) ""
 
         storageKey =
             findStorageKey newFen
@@ -978,6 +978,9 @@ viewLesson model =
     let
         maybeFrame =
             getFrame model.store model.currentGameState
+
+        defaultLessonMessage =
+            "## This is the default frame content.\n\n" ++ "It supports **markdown**."
     in
     case maybeFrame of
         Nothing ->
@@ -985,11 +988,19 @@ viewLesson model =
 
         Just frame ->
             div [ H.class "box", H.class "control" ]
-                [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ]
-                , button [ onClick FindBestMove, H.class "button is-small" ] [ text "Find Best Move" ]
+                [ div [] [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ] ]
                 , div [] [ text <| "Turn: " ++ (toString <| findTeam model.currentGameState) ]
-                , div [] [ input [ H.placeholder "The enemies gate is down", H.value frame.defaultMessage, Html.Events.onInput WriteDefaultMessage ] [] ]
+                , div []
+                    [ textarea
+                        [ H.class "textarea"
+                        , H.placeholder defaultLessonMessage
+                        , H.value frame.defaultMessage
+                        , Html.Events.onInput WriteDefaultMessage
+                        ]
+                        []
+                    ]
                 , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
+                , div [] [ button [ onClick FindBestMove, H.class "button is-small is-success" ] [ text "Find Best Move" ] ]
                 ]
 
 
@@ -1080,7 +1091,7 @@ viewSquareHints : List Position -> Hints -> Html Msg
 viewSquareHints selectedSquares (Hints hints) =
     case selectedSquares of
         [] ->
-            text "Click any square"
+            text "Click any square to add helper text"
 
         _ ->
             div []
@@ -1099,7 +1110,7 @@ viewSquareHints selectedSquares (Hints hints) =
                                         h
                         in
                         div []
-                            [ input [ H.placeholder storageKey, H.value hint, Html.Events.onInput (WriteHint storageKey) ] []
+                            [ textarea [ H.class "textarea", H.placeholder storageKey, H.value hint, Html.Events.onInput (WriteHint storageKey) ] []
                             ]
                     )
                     selectedSquares

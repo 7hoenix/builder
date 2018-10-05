@@ -136,7 +136,11 @@ update config msg (State state) =
             ( State { state | hover = Just position }, Cmd.none )
 
         SelectSquare position ->
-            ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
+            if List.member position state.squaresSelected then
+                ( State state, Cmd.none )
+
+            else
+                ( State { state | squaresSelected = position :: state.squaresSelected }, Cmd.none )
 
 
 dragConfig : Drag.Config DraggableItem Msg
