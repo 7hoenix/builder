@@ -59,6 +59,7 @@ type alias Model =
     , initialSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
+    , startingTeam : Player
     , submitting : Bool
     , chessModel : Chess.State
     }
@@ -103,6 +104,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
       , placements = initialPlacements
       , pointsAllowed = 1
       , submitting = False
+      , startingTeam = White
       , alert = Nothing
       , chessModel = initialChessState
       }
@@ -136,6 +138,7 @@ type Msg
     | RegenerateSeed Time.Time
     | Reset
     | SelectMode SupportedMode
+    | SelectTeam Player
     | SubmitLesson
     | Validate
     | WriteDefaultMessage String
@@ -170,7 +173,7 @@ update msg model =
             postLessonCompleted model result
 
         Record ->
-            ( handleGameUpdate { model | initialGameState = Just model.currentGameState } model.currentGameState, Cmd.none )
+            startRecording model
 
         RegenerateSeed currentTime ->
             regenerateSeed currentTime model
@@ -180,6 +183,9 @@ update msg model =
 
         SelectMode mode ->
             selectMode mode model
+
+        SelectTeam team ->
+            selectTeam team model
 
         SubmitLesson ->
             postLessonCmd { model | submitting = True }
@@ -282,6 +288,34 @@ postLessonCompleted model result =
             ( { model | submitting = False }, Cmd.none )
 
 
+startRecording : Model -> ( Model, Cmd Msg )
+startRecording model =
+    let
+        findTeamIdentifierFromPlayer =
+            \player ->
+                case player of
+                    White ->
+                        "w"
+
+                    Black ->
+                        "b"
+
+        updatedCurrentGameState =
+            String.join " "
+                (List.indexedMap
+                    (\i particle ->
+                        if i == 1 then
+                            findTeamIdentifierFromPlayer model.startingTeam
+
+                        else
+                            particle
+                    )
+                    (String.words model.currentGameState)
+                )
+    in
+    ( handleGameUpdate { model | initialGameState = Just updatedCurrentGameState } updatedCurrentGameState, Cmd.none )
+
+
 regenerateSeed : Time.Time -> Model -> ( Model, Cmd Msg )
 regenerateSeed currentTime model =
     let
@@ -302,6 +336,11 @@ selectMode mode model =
 
         ForcingMoves ->
             ( { model | mode = mode, alert = Just "Coming soon!" }, Cmd.none )
+
+
+selectTeam : Player -> Model -> ( Model, Cmd Msg )
+selectTeam team model =
+    ( { model | startingTeam = team }, Cmd.none )
 
 
 writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
@@ -910,6 +949,7 @@ viewSidebar : Model -> Html Msg
 viewSidebar model =
     div []
         [ viewMode model
+        , viewTeam model
         , viewSlider model
         , viewLesson model
         , viewActionMenu model
@@ -932,6 +972,25 @@ viewMode model =
             div [ H.class "box", H.class "control" ]
                 [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
                 , radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+                ]
+
+        Just _ ->
+            text ""
+
+
+viewTeam : Model -> Html Msg
+viewTeam model =
+    let
+        isChecked : Player -> Bool
+        isChecked =
+            \team -> findTeam model.currentGameState == team
+    in
+    case model.initialGameState of
+        Nothing ->
+            div [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Team" ]
+                , radio (SelectTeam White) " White" "team" (isChecked White)
+                , radio (SelectTeam Black) " Black" "team" (isChecked Black)
                 ]
 
         Just _ ->
