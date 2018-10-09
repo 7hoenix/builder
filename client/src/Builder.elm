@@ -206,6 +206,7 @@ handleChessMsg model chessMsg =
         config =
             { toMsg = ChessMsg
             , onFenChanged = HandleGameUpdate
+            , isRecording = isRecording model.initialGameState
             }
 
         ( updatedChessModel, chessCmd ) =
@@ -988,7 +989,7 @@ viewTeam model =
     case model.initialGameState of
         Nothing ->
             div [ H.class "box", H.class "control" ]
-                [ h3 [ H.class "subtitle is-5" ] [ text "Team" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Turn" ]
                 , radio (SelectTeam White) " White" "team" (isChecked White)
                 , radio (SelectTeam Black) " Black" "team" (isChecked Black)
                 ]
@@ -1254,6 +1255,16 @@ either fromError fromOk result =
 
         Ok a ->
             fromOk a
+
+
+isRecording : Maybe String -> Bool
+isRecording gameState =
+    case gameState of
+        Nothing ->
+            False
+
+        Just _ ->
+            True
 
 
 

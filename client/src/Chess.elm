@@ -102,6 +102,7 @@ type Msg
 type alias Config msg =
     { toMsg : Msg -> msg
     , onFenChanged : String -> msg
+    , isRecording : Bool
     }
 
 
@@ -125,7 +126,11 @@ update config msg (State state) =
                             makeMove from to state.board
 
                         updatedTeam =
-                            nextTeam state.team
+                            if config.isRecording then
+                                nextTeam state.team
+
+                            else
+                                state.team
                     in
                     ( State { state | board = board, team = updatedTeam }
                     , Task.succeed (Chess.Data.Board.toFen board updatedTeam)
