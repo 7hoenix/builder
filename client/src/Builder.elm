@@ -48,6 +48,17 @@ type SupportedMode
     | ForcingMoves
 
 
+
+---- DUPLICTED TYPE ATM ----
+
+
+type FeatureSet
+    = Full
+    | NoMoves
+    | PlayerMoves
+    | OpponentMoves
+
+
 type alias Model =
     { alert : Maybe String
     , apiEndpoint : String
@@ -55,6 +66,7 @@ type alias Model =
     , mode : SupportedMode
     , store : Store
     , currentGameState : String
+    , featureSet : FeatureSet
     , initialGameState : Maybe String
     , initialSeed : Random.Seed
     , placements : List Placement
@@ -95,6 +107,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
                     state
     in
     ( { apiEndpoint = apiEndpoint
+      , featureSet = Full
       , baseEngineUrl = baseEngineUrl
       , mode = Basic
       , store = Store Dict.empty
@@ -137,6 +150,7 @@ type Msg
     | Record
     | RegenerateSeed Time.Time
     | Reset
+    | SelectFeatureSet FeatureSet
     | SelectMode SupportedMode
     | SelectTeam Player
     | SubmitLesson
@@ -181,11 +195,14 @@ update msg model =
         Reset ->
             blankState model.initialSeed model.pointsAllowed model.apiEndpoint model.baseEngineUrl
 
+        SelectFeatureSet featureSet ->
+            ( selectFeatureSet featureSet model, Cmd.none )
+
         SelectMode mode ->
-            selectMode mode model
+            ( selectMode mode model, Cmd.none )
 
         SelectTeam team ->
-            selectTeam team model
+            ( { model | startingTeam = team }, Cmd.none )
 
         SubmitLesson ->
             postLessonCmd { model | submitting = True }
@@ -265,7 +282,7 @@ encodeStore (Store store) =
 
 
 encodeFrame : Frame -> E.Value
-encodeFrame { squares, defaultMessage } =
+encodeFrame { featureSet, squares, defaultMessage } =
     let
         (Hints hints) =
             squares
@@ -274,9 +291,26 @@ encodeFrame { squares, defaultMessage } =
             List.map (\( f, a ) -> ( f, E.string a )) <| Dict.toList hints
     in
     E.object
-        [ ( "squares", E.object squaresEncoder )
+        [ ( "featureSet", encodeFeatureSet featureSet )
+        , ( "squares", E.object squaresEncoder )
         , ( "defaultMessage", E.string defaultMessage )
         ]
+
+
+encodeFeatureSet : FeatureSet -> E.Value
+encodeFeatureSet featureSet =
+    case featureSet of
+        Full ->
+            E.string "Full"
+
+        NoMoves ->
+            E.string "NoMoves"
+
+        PlayerMoves ->
+            E.string "PlayerMoves"
+
+        OpponentMoves ->
+            E.string "OpponentMoves"
 
 
 postLessonCompleted : Model -> Result Http.Error String -> ( Model, Cmd Msg )
@@ -329,19 +363,24 @@ regenerateSeed currentTime model =
     ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
 
 
-selectMode : SupportedMode -> Model -> ( Model, Cmd Msg )
+selectFeatureSet : FeatureSet -> Model -> Model
+selectFeatureSet featureSet model =
+    case ( model.initialGameState, findFrame model.store (findStorageKey model.currentGameState) ) of
+        ( Just _, Just frame ) ->
+            { model | store = saveFeatureSet model.store (findStorageKey model.currentGameState) frame featureSet }
+
+        ( _, _ ) ->
+            { model | featureSet = featureSet }
+
+
+selectMode : SupportedMode -> Model -> Model
 selectMode mode model =
     case mode of
         Basic ->
-            ( { model | mode = mode, alert = Nothing }, Cmd.none )
+            { model | mode = mode, alert = Nothing }
 
         ForcingMoves ->
-            ( { model | mode = mode, alert = Just "Coming soon!" }, Cmd.none )
-
-
-selectTeam : Player -> Model -> ( Model, Cmd Msg )
-selectTeam team model =
-    ( { model | startingTeam = team }, Cmd.none )
+            { model | mode = mode, alert = Just "Coming soon!" }
 
 
 writeDefaultMessage : String -> Model -> ( Model, Cmd Msg )
@@ -405,7 +444,7 @@ handleGameUpdateHelp : Model -> String -> Chess.State -> Model
 handleGameUpdateHelp model newFen updatedState =
     let
         blankFrame =
-            Frame (Hints Dict.empty) ""
+            Frame model.featureSet (Hints Dict.empty) ""
 
         storageKey =
             findStorageKey newFen
@@ -475,6 +514,15 @@ saveDefaultMessage (Store store) frameKey frame content =
     let
         updatedFrame =
             { frame | defaultMessage = content }
+    in
+    Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
+
+
+saveFeatureSet : Store -> String -> Frame -> FeatureSet -> Store
+saveFeatureSet (Store store) frameKey frame featureSet =
+    let
+        updatedFrame =
+            { frame | featureSet = featureSet }
     in
     Store (Dict.update frameKey (\_ -> Just updatedFrame) store)
 
@@ -950,6 +998,7 @@ viewSidebar : Model -> Html Msg
 viewSidebar model =
     div []
         [ viewMode model
+        , viewFeatureSet model
         , viewTeam model
         , viewSlider model
         , viewLesson model
@@ -977,6 +1026,27 @@ viewMode model =
 
         Just _ ->
             text ""
+
+
+viewFeatureSet : Model -> Html Msg
+viewFeatureSet model =
+    let
+        isChecked : FeatureSet -> Bool
+        isChecked =
+            \x -> model.featureSet == x
+    in
+    case model.initialGameState of
+        Nothing ->
+            text ""
+
+        Just _ ->
+            div [ H.class "box", H.class "control" ]
+                [ h3 [ H.class "subtitle is-5" ] [ text "Feature Set" ]
+                , radio (SelectFeatureSet Full) " Full" "featureSet" (isChecked Full)
+                , radio (SelectFeatureSet NoMoves) " NoMoves" "featureSet" (isChecked NoMoves)
+                , radio (SelectFeatureSet PlayerMoves) " PlayerMoves" "featureSet" (isChecked PlayerMoves)
+                , radio (SelectFeatureSet OpponentMoves) " OpponentMoves" "featureSet" (isChecked OpponentMoves)
+                ]
 
 
 viewTeam : Model -> Html Msg
@@ -1134,7 +1204,8 @@ type Store
 
 
 type alias Frame =
-    { squares : Hints
+    { featureSet : FeatureSet
+    , squares : Hints
     , defaultMessage : String
     }
 
