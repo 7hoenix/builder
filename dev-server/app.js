@@ -16,16 +16,15 @@ const lessons = [
             "This square will completely restrict the enemy monarchs movement to just the back rank."
         },
         defaultMessage: "We are going to learn the net",
-        mode: "Full"
+        featureSet: "Full"
       },
       "4k3/3R4/8/5K2/8/8/8/8 w": {
         squares: {
           e6:
             "Monarchs move one square in any direction. However they can't move into danger. So if you move here then the enemy monarch cannot capture your rook, Monarchs move one square in any direction. However they can't move into danger. So if you move here then the enemy monarch cannot capture your rook, Monarchs move one square in any direction. However they can't move into danger. So if you move here then the enemy monarch cannot capture your rook, "
         },
-        defaultMessage:
-          "The enemy monarch is in range to capture. We need to defend the rook.",
-        mode: "Full"
+        defaultMessage: "The enemy monarch is in range to capture. We need to defend the rook.",
+        featureSet: "Full"
       },
       "5k2/3R4/4K3/8/8/8/8/8 w": {
         squares: {
@@ -34,28 +33,28 @@ const lessons = [
           c7: "You may buy a move with a stutter step"
         },
         defaultMessage: "Think carefully.",
-        mode: "Full"
+        featureSet: "Full"
       },
       "6k1/2R5/4K3/8/8/8/8/8 w": {
         squares: {
           f6: "Bounce the monarch out of the corner."
         },
         defaultMessage: "Pursue",
-        mode: "Full"
+        featureSet: "Full"
       },
       "7k/2R5/5K2/8/8/8/8/8 w": {
         squares: {
           g6: "Line up the mirror."
         },
         defaultMessage: "The enemy monarch only has one move.",
-        mode: "Full"
+        featureSet: "Full"
       },
       "6k1/2R5/6K1/8/8/8/8/8 w": {
         squares: {
           c8: "Check mate"
         },
         defaultMessage: "Controlling the mirror.",
-        mode: "Full"
+        featureSet: "Full"
       }
     }
   }
