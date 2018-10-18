@@ -2,27 +2,30 @@ module Drag exposing (Config, Msg, State, draggableAttributes, subscriptions, up
 
 import Animation
 import Animation.Messenger as AM
+import Browser.Dom as Dom
+import Browser.Events exposing (onMouseMove)
 import Html exposing (Attribute)
 import Html.Attributes exposing (draggable)
-import Html.Events exposing (onMouseEnter, onWithOptions)
+import Html.Events exposing (custom, onMouseEnter)
 import Json.Decode as D
-import Mouse
 import Task
 
 
 type alias State item =
     { subject : Maybe item
-    , position : Mouse.Position
+
+    -- , position : Mouse.Position
+    , elementItsOver : Dom.Element
     , original : AM.State (Msg item)
     , cursor : AM.State (Msg item)
     }
 
 
 type Msg item
-    = Start item Mouse.Position
+    = Start item Dom.Element
     | Stop
     | Reset
-    | MouseMove Mouse.Position
+    | MouseMove Dom.Element
     | Animate Animation.Msg
 
 
@@ -41,10 +44,10 @@ type alias Config item msg =
 update : Config item msg -> Msg item -> State item -> ( State item, Cmd msg )
 update config msg state =
     case msg of
-        Start subject position ->
+        Start subject element ->
             ( { state
                 | subject = Just subject
-                , position = position
+                , elementItsOver = element
                 , original = Animation.interrupt config.onOriginalStartDrag state.original
                 , cursor = Animation.interrupt config.onCursorStartDrag state.cursor
               }
@@ -67,8 +70,8 @@ update config msg state =
         Reset ->
             ( { state | subject = Nothing }, Cmd.none )
 
-        MouseMove position ->
-            ( { state | position = position }, Cmd.none )
+        MouseMove element ->
+            ( { state | elementItsOver = element }, Cmd.none )
 
         Animate tick ->
             let
@@ -87,13 +90,13 @@ subscriptions : Config item msg -> State item -> Sub msg
 subscriptions { toMsg } state =
     Sub.map toMsg <|
         Sub.batch
-            [ Mouse.ups (\_ -> Stop)
+            [ onMouseMove (\_ -> Stop)
             , Animation.subscription Animate [ state.original, state.cursor ]
             , if state.subject == Nothing then
                 Sub.none
 
               else
-                Mouse.moves MouseMove
+                onMouseMove MouseMove
             ]
 
 
@@ -104,11 +107,17 @@ draggableAttributes { toMsg } subject =
     ]
 
 
-onDragStart : (Mouse.Position -> msg) -> Attribute msg
+onDragStart : (Dom.Element -> msg) -> Attribute msg
 onDragStart toMsg =
-    onWithOptions "dragstart"
-        { preventDefault = True, stopPropagation = True }
-        (D.map2 (\x y -> toMsg (Mouse.Position x y))
-            (D.field "clientX" D.int)
-            (D.field "clientY" D.int)
-        )
+    Debug.todo "Add drag"
+
+
+
+-- onDragStart : (Dom.Element -> msg) -> Attribute msg
+-- onDragStart toMsg =
+--     custom "dragstart"
+--         { preventDefault = True, stopPropagation = True }
+--         (D.map2 (\x y -> toMsg (Mouse.Position x y))
+--             (D.field "clientX" D.int)
+--             (D.field "clientY" D.int)
+--         )

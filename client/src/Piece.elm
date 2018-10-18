@@ -1,4 +1,4 @@
-module Piece exposing (..)
+module Piece exposing (blackBishop, blackKing, blackKnight, blackPawn, blackQueen, blackRook, pieceSize, pieceSvg, whiteBishop, whiteKing, whiteKnight, whitePawn, whiteQueen, whiteRook)
 
 import Svg exposing (Svg, circle, g, path, rect, svg, text, text_)
 import Svg.Attributes exposing (alignmentBaseline, cx, cy, d, height, r, style, transform, viewBox, width, x, y)

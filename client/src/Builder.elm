@@ -14,7 +14,6 @@ import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, jsonBody)
 import Json.Decode as D
 import Json.Encode as E
-import Random.Pcg as Random
 import Task
 import Time
 

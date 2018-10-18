@@ -32,7 +32,6 @@ import Html.Attributes
 import Html.Events exposing (..)
 import Json.Decode as D
 import Json.Encode as E
-import Mouse
 import Task
 
 
@@ -221,10 +220,8 @@ viewGhostImage config drag =
                 piece
                 (Animation.render drag.cursor
                     ++ [ followCursor drag.position
-                       , Html.Attributes.style
-                            [ ( "max-width", config.each )
-                            , ( "max-height", config.each )
-                            ]
+                       , Html.Attributes.style "max-width" config.each
+                       , Html.Attributes.style "max-height" config.each
                        ]
                 )
 
