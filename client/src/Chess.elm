@@ -19,7 +19,7 @@ module Chess exposing
 
 -}
 
-import Animation
+import Browser.Dom exposing (getElement)
 import Chess.Data.Board exposing (Board, Square(..))
 import Chess.Data.Piece exposing (Piece(..))
 import Chess.Data.Player exposing (Player(..))
@@ -32,7 +32,6 @@ import Html.Attributes
 import Html.Events exposing (..)
 import Json.Decode as D
 import Json.Encode as E
-import Mouse
 import Task
 
 
@@ -61,7 +60,7 @@ type alias DraggableItem =
 {-| -}
 fromFen : String -> Maybe State
 fromFen fen =
-    case D.decodeValue Chess.Data.Board.board (E.string fen) of
+    case D.decodeValue Chess.Data.Board.boardDecoder (E.string fen) of
         Err reason ->
             Nothing
 
@@ -73,9 +72,10 @@ fromFen fen =
                     , hover = Nothing
                     , drag =
                         { subject = Nothing
-                        , position = Mouse.Position 0 0
-                        , original = Animation.style present
-                        , cursor = Animation.style gone
+                        , elementItsOver = Nothing
+
+                        -- , original = Animation.style present
+                        -- , cursor = Animation.style gone
                         }
                     , squaresSelected = []
                     }
@@ -154,10 +154,10 @@ dragConfig =
     , finalRelease = FinalRelease
 
     -- ANIMATION
-    , onCursorStartDrag = [ Animation.to present ]
-    , onCursorStopDrag = [ Animation.to gone ]
-    , onOriginalStartDrag = [ Animation.to gone ]
-    , onOriginalStopDrag = [ Animation.to present ]
+    -- , onCursorStartDrag = [ Animation.to present ]
+    -- , onCursorStopDrag = [ Animation.to gone ]
+    -- , onOriginalStartDrag = [ Animation.to gone ]
+    -- , onOriginalStopDrag = [ Animation.to present ]
     }
 
 
@@ -181,14 +181,13 @@ atPosition newSquare target =
                         square
 
 
-present : List Animation.Property
-present =
-    [ Animation.opacity 1.0 ]
 
-
-gone : List Animation.Property
-gone =
-    [ Animation.opacity 0.0 ]
+-- present : List Animation.Property
+-- present =
+--     [ Animation.opacity 1.0 ]
+-- gone : List Animation.Property
+-- gone =
+--     [ Animation.opacity 0.0 ]
 
 
 {-| -}
@@ -219,32 +218,33 @@ viewGhostImage config drag =
         Just { player, piece } ->
             Chess.View.Asset.findSvg player
                 piece
-                (Animation.render drag.cursor
-                    ++ [ followCursor drag.position
-                       , Html.Attributes.style
-                            [ ( "max-width", config.each )
-                            , ( "max-height", config.each )
-                            ]
-                       ]
-                )
+                []
 
 
-followCursor : Mouse.Position -> Attribute msg
-followCursor { x, y } =
-    Html.Attributes.style
-        [ ( "position", "absolute" )
-        , ( "top", "calc(" ++ toString y ++ "px - 11em)" )
-        , ( "left", "calc(" ++ toString x ++ "px - 9em)" )
-        , ( "z-index", "9" )
-        , ( "pointer-events", "none" )
-        ]
+
+-- (Animation.render drag.cursor
+--     ++ [ -- followCursor drag.position
+--          Html.Attributes.style "max-width" config.each
+--        , Html.Attributes.style "max-height" config.each
+--        ]
+-- )
+---------------------------------------------
+-- followCursor : Mouse.Position -> Attribute msg
+-- followCursor { x, y } =
+--     Html.Attributes.style
+--         [ ( "position", "absolute" )
+--         , ( "top", "calc(" ++ toString y ++ "px - 11em)" )
+--         , ( "left", "calc(" ++ toString x ++ "px - 9em)" )
+--         , ( "z-index", "9" )
+--         , ( "pointer-events", "none" )
+--         ]
 
 
 viewCell : Drag.State DraggableItem -> Position -> Chess.Data.Board.Square -> Html Msg
 viewCell drag position square =
     case square of
         Empty ->
-            Chess.View.Board.square position
+            Chess.View.Board.viewSquare position
                 square
                 [ onMouseEnter (SetHover position)
                 , onClick (SelectSquare position)
@@ -252,26 +252,27 @@ viewCell drag position square =
                 []
 
         Occupied player piece ->
-            Chess.View.Board.square position
+            Chess.View.Board.viewSquare position
                 square
                 (List.concat
                     [ onMouseEnter (SetHover position)
-                        :: Html.Attributes.style [ ( "cursor", "grab" ) ]
+                        :: Html.Attributes.style "cursor" "grab"
                         :: Drag.draggableAttributes dragConfig
                             (DraggableItem position player piece)
                     , [ onClick (SelectSquare position) ]
                     ]
                 )
-                (animateDrag position drag)
+                []
 
 
-animateDrag : Position -> Drag.State DraggableItem -> List (Attribute Msg)
-animateDrag position drag =
-    if Maybe.map .position drag.subject == Just position then
-        Animation.render drag.original
 
-    else
-        []
+-- (animateDrag position drag)
+-- animateDrag : Position -> Drag.State DraggableItem -> List (Attribute Msg)
+-- animateDrag position drag =
+--     if Maybe.map .position drag.subject == Just position then
+--         Animation.render drag.original
+--     else
+--         []
 
 
 either : (x -> b) -> (a -> b) -> Result x a -> b
@@ -294,7 +295,7 @@ findTeam currentGame =
             Black
 
         _ ->
-            Debug.crash "fix me"
+            Debug.todo "fix me"
 
 
 nextTeam : Player -> Player

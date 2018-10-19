@@ -2,6 +2,7 @@ import "bulma/css/bulma.css";
 import Chess from "chess.js/chess";
 import { builder } from "./builder.js";
 import registerServiceWorker from "./registerServiceWorker";
+console.log('fdsa')
 
 const chess = new Chess();
 const endpoint = process.env.ELM_APP_API_ENDPOINT;
@@ -13,4 +14,6 @@ const baseEngineUrl = engineUrl
   ? engineUrl
   : "https://3gdfbpe678.execute-api.us-east-1.amazonaws.com/dev";
 const initialSeed = Math.floor(Math.random() * 10 + 1);
+console.log('asdf')
+console.log('hi cake', chess, apiEndpoint, baseEngineUrl, initialSeed)
 builder(chess, apiEndpoint, baseEngineUrl, initialSeed);

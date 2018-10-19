@@ -1,6 +1,7 @@
 module Builder exposing (main)
 
 import Api
+import Browser
 import BuilderJs
 import Char
 import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
@@ -9,14 +10,28 @@ import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
 import Dict exposing (Dict)
 import Html exposing (Html, a, button, div, fieldset, h1, h2, h3, h4, h5, input, label, nav, p, section, span, text, textarea)
-import Html.Attributes as H exposing (defaultValue, href, max, min, target, type_)
+import Html.Attributes as H exposing (href, max, min, target, type_)
 import Html.Events exposing (on, onClick, targetValue)
 import Http exposing (Request, jsonBody)
 import Json.Decode as D
 import Json.Encode as E
-import Random.Pcg as Random
+import Random
 import Task
 import Time
+
+
+
+---- PROGRAM ----
+
+
+main : Program Flags Model Msg
+main =
+    Browser.document
+        { view = view
+        , init = init
+        , update = update
+        , subscriptions = subscriptions
+        }
 
 
 
@@ -101,7 +116,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
         initialChessState =
             case Chess.fromFen blankGameFen of
                 Nothing ->
-                    Debug.crash "FEN PARSER IS BROKEN, PANIC"
+                    Debug.todo "FEN PARSER IS BROKEN, PANIC"
 
                 Just state ->
                     state
@@ -117,7 +132,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
       , placements = initialPlacements
       , pointsAllowed = 1
       , submitting = False
-      , startingTeam = White
+      , startingTeam = Black
       , alert = Nothing
       , chessModel = initialChessState
       }
@@ -148,7 +163,7 @@ type Msg
     | HandleSliderChange Int
     | PostLessonCompleted (Result Http.Error String)
     | Record
-    | RegenerateSeed Time.Time
+    | RegenerateSeed Time.Posix
     | Reset
     | SelectFeatureSet FeatureSet
     | SelectMode SupportedMode
@@ -245,7 +260,7 @@ fetchSeedCompleted model result =
                     Random.initialSeed seed
 
                 updatedPlacements =
-                    generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
+                    generate [] model.pointsAllowed (fastForward model.pointsAllowed nextSeed)
             in
             ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
 
@@ -351,14 +366,14 @@ startRecording model =
     ( handleGameUpdate { model | initialGameState = Just updatedCurrentGameState } updatedCurrentGameState, Cmd.none )
 
 
-regenerateSeed : Time.Time -> Model -> ( Model, Cmd Msg )
+regenerateSeed : Time.Posix -> Model -> ( Model, Cmd Msg )
 regenerateSeed currentTime model =
     let
         nextSeed =
             findNextSeed currentTime
 
         updatedPlacements =
-            generate [] model.pointsAllowed (Random.fastForward model.pointsAllowed nextSeed)
+            generate [] model.pointsAllowed (fastForward model.pointsAllowed nextSeed)
     in
     ( { model | initialSeed = nextSeed, placements = updatedPlacements }, sendPlacements updatedPlacements )
 
@@ -474,7 +489,7 @@ handleSliderChange : Int -> Model -> ( Model, Cmd Msg )
 handleSliderChange pointsAllowed model =
     let
         updatedPlacements =
-            generate [] pointsAllowed (Random.fastForward pointsAllowed model.initialSeed)
+            generate [] pointsAllowed (fastForward pointsAllowed model.initialSeed)
     in
     ( { model
         | pointsAllowed = pointsAllowed
@@ -532,27 +547,27 @@ sendPlacements placements =
     BuilderJs.fromElm
         (E.object
             [ ( "tag", E.string "SEND_PLACEMENTS" )
-            , ( "placements", pplacements placements )
+            , ( "placements", placementsEncoder placements )
             ]
         )
 
 
-pplacements : List Placement -> E.Value
-pplacements placements =
-    E.list (List.map (\p -> placement p) placements)
+placementsEncoder : List Placement -> E.Value
+placementsEncoder placements =
+    E.list placementEncoder placements
 
 
-placement : Placement -> E.Value
-placement placement =
+placementEncoder : Placement -> E.Value
+placementEncoder placement =
     E.object
-        [ ( "square", square placement.square )
-        , ( "piece", piece placement.piece )
-        , ( "team", team placement.team )
+        [ ( "square", squareEncoder placement.square )
+        , ( "piece", pieceEncoder placement.piece )
+        , ( "team", teamEncoder placement.team )
         ]
 
 
-square : SquareLocation -> E.Value
-square square =
+squareEncoder : SquareLocation -> E.Value
+squareEncoder square =
     let
         row =
             case square.x of
@@ -581,13 +596,13 @@ square square =
                     "h"
 
                 _ ->
-                    Debug.crash "not valid x parameter :("
+                    Debug.todo "not valid x parameter :("
     in
-    E.string (row ++ toString square.y)
+    E.string (row ++ String.fromInt square.y)
 
 
-piece : Piece -> E.Value
-piece piece =
+pieceEncoder : Piece -> E.Value
+pieceEncoder piece =
     case piece of
         Monarch ->
             E.string "k"
@@ -608,8 +623,8 @@ piece piece =
             E.string "p"
 
 
-team : Player -> E.Value
-team team =
+teamEncoder : Player -> E.Value
+teamEncoder team =
     case team of
         Black ->
             E.string "b"
@@ -876,52 +891,56 @@ squareGenerator =
 
 pieceGenerator : Random.Generator Piece
 pieceGenerator =
-    Random.choices <|
-        List.map Random.constant
-            [ Monarch
-            , Hand
-            , Rook
-            , Bishop
-            , Knight
-            , Pawn
-            ]
+    Random.uniform Monarch
+        [ Hand
+        , Rook
+        , Bishop
+        , Knight
+        , Pawn
+        ]
 
 
 teamGenerator : Random.Generator Player
 teamGenerator =
-    Random.choice Black White
+    Random.uniform Black [ White ]
 
 
 
 ---- VIEW ----
 
 
-view : Model -> Html Msg
+view : Model -> Browser.Document Msg
 view model =
-    div []
-        [ viewNavbar model
-        , viewAlerts model
-        , section [ H.class "section" ]
-            [ div [ H.class "container" ]
-                [ div [ H.class "columns is-centered is-variable is-8" ]
-                    [ div
-                        [ H.class "column is-narrow"
-                        ]
-                        [ Html.map ChessMsg (Chess.view findConfig model.chessModel)
-                        , section [ H.class "columns" ]
-                            [ div [ H.class "column is-two-thirds" ] []
-                            , div [ H.class "column is-one-third" ]
-                                [ h2 [ H.class "subtitle is-3" ] [ text <| "Level " ++ toString model.pointsAllowed ]
-                                ]
+    { title = "Builder"
+    , body = viewApp model
+    }
+
+
+viewApp : Model -> List (Html Msg)
+viewApp model =
+    [ viewNavbar model
+    , viewAlerts model
+    , section [ H.class "section" ]
+        [ div [ H.class "container" ]
+            [ div [ H.class "columns is-centered is-variable is-8" ]
+                [ div
+                    [ H.class "column is-narrow"
+                    ]
+                    [ Html.map ChessMsg (Chess.view findConfig model.chessModel)
+                    , section [ H.class "columns" ]
+                        [ div [ H.class "column is-two-thirds" ] []
+                        , div [ H.class "column is-one-third" ]
+                            [ h2 [ H.class "subtitle is-3" ] [ text <| "Level " ++ String.fromInt model.pointsAllowed ]
                             ]
                         ]
-                    , div [ H.class "column is-narrow has-text-centered" ]
-                        [ viewSidebar model
-                        ]
+                    ]
+                , div [ H.class "column is-narrow has-text-centered" ]
+                    [ viewSidebar model
                     ]
                 ]
             ]
         ]
+    ]
 
 
 viewNavbar : Model -> Html Msg
@@ -964,7 +983,7 @@ viewNavbar model =
                             p [] [ text "" ]
 
                         Just _ ->
-                            p [ H.class "title is-5" ] [ text ("Level " ++ toString model.pointsAllowed ++ ", Basic") ]
+                            p [ H.class "title is-5" ] [ text ("Level " ++ String.fromInt model.pointsAllowed ++ ", Basic") ]
                     ]
                 ]
             ]
@@ -1086,16 +1105,16 @@ findTeam currentGame =
             Black
 
         _ ->
-            Debug.crash "fix me"
+            Debug.todo "fix me"
 
 
 parseInt : String -> D.Decoder Msg
 parseInt rawString =
     case String.toInt rawString of
-        Err err ->
-            D.fail err
+        Nothing ->
+            D.fail <| rawString ++ " is not parseable to an integer"
 
-        Ok int ->
+        Just int ->
             D.succeed (HandleSliderChange int)
 
 
@@ -1111,6 +1130,14 @@ viewLesson model =
 
         defaultLessonMessage =
             "## This is the default frame content.\n\n" ++ "It supports **markdown**."
+
+        teamToString team =
+            case team of
+                White ->
+                    "white"
+
+                Black ->
+                    "black"
     in
     case maybeFrame of
         Nothing ->
@@ -1119,7 +1146,7 @@ viewLesson model =
         Just frame ->
             div [ H.class "box", H.class "control" ]
                 [ div [] [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ] ]
-                , div [] [ text <| "Turn: " ++ (toString <| findTeam model.currentGameState) ]
+                , div [] [ text <| "Turn: " ++ (teamToString <| findTeam model.currentGameState) ]
                 , div []
                     [ textarea
                         [ H.class "textarea"
@@ -1168,7 +1195,7 @@ makeSlider model =
                     [ type_ "range"
                     , H.min "1"
                     , H.max "10"
-                    , defaultValue <| toString model.pointsAllowed
+                    , H.value <| String.fromInt model.pointsAllowed
                     , on "input" (targetValue |> D.andThen parseInt)
                     ]
                     []
@@ -1178,7 +1205,7 @@ makeSlider model =
         Just _ ->
             div []
                 [ text <|
-                    toString model.pointsAllowed
+                    String.fromInt model.pointsAllowed
                         ++ " Points of Material Allowed"
                 ]
 
@@ -1227,10 +1254,10 @@ viewSquareHints selectedSquares (Hints hints) =
         _ ->
             div []
                 (List.map
-                    (\square ->
+                    (\selectedSquare ->
                         let
                             storageKey =
-                                toCommand square
+                                toCommand selectedSquare
 
                             hint =
                                 case Dict.get storageKey hints of
@@ -1260,7 +1287,7 @@ toCommand position =
         ( row, column ) =
             toRowColumn position
     in
-    String.fromChar (Char.fromCode <| column + 97) ++ toString (8 - row)
+    String.fromChar (Char.fromCode <| column + 97) ++ String.fromInt (8 - row)
 
 
 
@@ -1313,9 +1340,9 @@ api apiEndpoint =
     apiEndpoint ++ "/"
 
 
-findNextSeed : Time.Time -> Random.Seed
+findNextSeed : Time.Posix -> Random.Seed
 findNextSeed currentTime =
-    Random.initialSeed <| Basics.floor <| Time.inMilliseconds currentTime
+    Random.initialSeed <| Time.posixToMillis currentTime
 
 
 either : (x -> b) -> (a -> b) -> Result x a -> b
@@ -1336,6 +1363,11 @@ isRecording gameState =
 
         Just _ ->
             True
+
+
+fastForward : Int -> Random.Seed -> Random.Seed
+fastForward numberOfStepsToApply seed =
+    seed
 
 
 
@@ -1361,18 +1393,4 @@ decodeFen value =
             HandleGameUpdate fen
 
         Err error ->
-            Error ("fen decoding failed: " ++ error)
-
-
-
----- PROGRAM ----
-
-
-main : Program Flags Model Msg
-main =
-    Html.programWithFlags
-        { view = view
-        , init = init
-        , update = update
-        , subscriptions = subscriptions
-        }
+            Error ("fen decoding failed: " ++ Debug.toString error)

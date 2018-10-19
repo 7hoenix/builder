@@ -1,4 +1,5 @@
 import { Builder } from "./Builder.elm";
+console.log('builder', Builder)
 
 export function builder(chess, apiEndpoint, baseEngineUrl, seed) {
   const app = Builder.embed(document.getElementById("root"), {

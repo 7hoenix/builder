@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "description": "Create lesson content",
   "main": "src/index.js",
-  "directories": {
-  },
+  "directories": {},
   "scripts": {
     "build": "elm-app build",
     "dev": "ELM_APP_API_ENDPOINT=\"http://localhost:3001/api\" elm-app start"
@@ -12,10 +11,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bulma": "^0.7.1",
+    "bulma": "^0.7.2",
     "chess.js": "^0.10.2"
   },
   "devDependencies": {
-    "create-elm-app": "^1.10.4"
+    "create-elm-app": "^2.2.0"
   }
 }
