@@ -123,17 +123,16 @@ subscriptions { toMsg } state =
 
 draggableAttributes : Config item msg -> item -> List (Attribute msg)
 draggableAttributes { toMsg } subject =
-    [ draggable "true"
-    , onDragStart <| toMsg << Start subject
-    ]
-
-
-onDragStart : (Dom.Element -> msg) -> Attribute msg
-onDragStart toMsg =
-    Debug.todo "Add drag"
+    []
 
 
 
+--     [ draggable "true"
+--     , onDragStart <| toMsg << Start subject
+--     ]
+-- onDragStart : (Dom.Element -> msg) -> Attribute msg
+-- onDragStart toMsg =
+--     Debug.todo "Add drag"
 -- onDragStart : (Dom.Element -> msg) -> Attribute msg
 -- onDragStart toMsg =
 --     custom "dragstart"
