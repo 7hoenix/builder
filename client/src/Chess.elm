@@ -44,7 +44,7 @@ type State
     = State
         { board : Board
         , team : Player
-        , drag : Drag.State DraggableItem
+        , drag : Drag.Model
         , hover : Maybe Position
         , squaresSelected : List Position
         }
@@ -70,13 +70,13 @@ fromFen fen =
                     { board = board
                     , team = findTeam fen
                     , hover = Nothing
-                    , drag =
-                        { subject = Nothing
-                        , elementItsOver = Nothing
+                    , drag = Drag.init Nothing
 
-                        -- , original = Animation.style present
-                        -- , cursor = Animation.style gone
-                        }
+                    -- { subject = Nothing
+                    -- , elementItsOver = Nothing
+                    -- -- , original = Animation.style present
+                    -- -- , cursor = Animation.style gone
+                    -- }
                     , squaresSelected = []
                     }
 
