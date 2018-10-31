@@ -2,27 +2,28 @@ module Drag exposing (Config, Msg, State, draggableAttributes, subscriptions, up
 
 import Animation
 import Animation.Messenger as AM
+import Browser.Dom as Dom
+import Browser.Events exposing (onMouseMove, onMouseUp)
 import Html exposing (Attribute)
 import Html.Attributes exposing (draggable)
-import Html.Events exposing (onMouseEnter, onWithOptions)
+import Html.Events exposing (custom, onMouseEnter)
 import Json.Decode as D
-import Mouse
 import Task
 
 
 type alias State item =
     { subject : Maybe item
-    , position : Mouse.Position
+    , position : ( Int, Int )
     , original : AM.State (Msg item)
     , cursor : AM.State (Msg item)
     }
 
 
 type Msg item
-    = Start item Mouse.Position
+    = Start item ( Int, Int )
     | Stop
     | Reset
-    | MouseMove Mouse.Position
+    | MouseMove Int Int
     | Animate Animation.Msg
 
 
@@ -41,10 +42,9 @@ type alias Config item msg =
 update : Config item msg -> Msg item -> State item -> ( State item, Cmd msg )
 update config msg state =
     case msg of
-        Start subject position ->
+        Start subject element ->
             ( { state
                 | subject = Just subject
-                , position = position
                 , original = Animation.interrupt config.onOriginalStartDrag state.original
                 , cursor = Animation.interrupt config.onCursorStartDrag state.cursor
               }
@@ -67,8 +67,8 @@ update config msg state =
         Reset ->
             ( { state | subject = Nothing }, Cmd.none )
 
-        MouseMove position ->
-            ( { state | position = position }, Cmd.none )
+        MouseMove x y ->
+            ( { state | position = ( x, y ) }, Cmd.none )
 
         Animate tick ->
             let
@@ -87,13 +87,16 @@ subscriptions : Config item msg -> State item -> Sub msg
 subscriptions { toMsg } state =
     Sub.map toMsg <|
         Sub.batch
-            [ Mouse.ups (\_ -> Stop)
-            , Animation.subscription Animate [ state.original, state.cursor ]
-            , if state.subject == Nothing then
-                Sub.none
+            [ Animation.subscription Animate [ state.original, state.cursor ]
+            , case state.subject of
+                Nothing ->
+                    Sub.none
 
-              else
-                Mouse.moves MouseMove
+                Just _ ->
+                    Sub.batch
+                        [ onMouseMove (D.map2 MouseMove pageX pageY)
+                        , onMouseUp <| D.succeed Stop
+                        ]
             ]
 
 
@@ -104,11 +107,25 @@ draggableAttributes { toMsg } subject =
     ]
 
 
-onDragStart : (Mouse.Position -> msg) -> Attribute msg
+onDragStart : (( Int, Int ) -> msg) -> Attribute msg
 onDragStart toMsg =
-    onWithOptions "dragstart"
-        { preventDefault = True, stopPropagation = True }
-        (D.map2 (\x y -> toMsg (Mouse.Position x y))
+    custom "dragstart" <|
+        D.map2
+            (\x y ->
+                { message = toMsg ( x, y )
+                , preventDefault = True
+                , stopPropagation = True
+                }
+            )
             (D.field "clientX" D.int)
             (D.field "clientY" D.int)
-        )
+
+
+pageX : D.Decoder Int
+pageX =
+    D.field "pageX" D.int
+
+
+pageY : D.Decoder Int
+pageY =
+    D.field "pageY" D.int

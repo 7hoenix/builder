@@ -20,6 +20,7 @@ module Chess exposing
 -}
 
 import Animation
+import Browser.Dom exposing (getElement)
 import Chess.Data.Board exposing (Board, Square(..))
 import Chess.Data.Piece exposing (Piece(..))
 import Chess.Data.Player exposing (Player(..))
@@ -32,7 +33,6 @@ import Html.Attributes
 import Html.Events exposing (..)
 import Json.Decode as D
 import Json.Encode as E
-import Mouse
 import Task
 
 
@@ -61,7 +61,11 @@ type alias DraggableItem =
 {-| -}
 fromFen : String -> Maybe State
 fromFen fen =
-    case D.decodeValue Chess.Data.Board.board (E.string fen) of
+    let
+        asdf =
+            Debug.log "fen" fen
+    in
+    case Debug.log "decoded" <| D.decodeValue Chess.Data.Board.boardDecoder (E.string fen) of
         Err reason ->
             Nothing
 
@@ -73,7 +77,7 @@ fromFen fen =
                     , hover = Nothing
                     , drag =
                         { subject = Nothing
-                        , position = Mouse.Position 0 0
+                        , position = ( 0, 0 )
                         , original = Animation.style present
                         , cursor = Animation.style gone
                         }
@@ -116,7 +120,7 @@ update config msg (State state) =
                 |> Tuple.mapSecond (Cmd.map config.toMsg)
 
         FinalRelease from ->
-            case state.hover of
+            case Debug.log "hover" state.hover of
                 Nothing ->
                     ( State state, Cmd.none )
 
@@ -220,31 +224,28 @@ viewGhostImage config drag =
             Chess.View.Asset.findSvg player
                 piece
                 (Animation.render drag.cursor
-                    ++ [ followCursor drag.position
-                       , Html.Attributes.style
-                            [ ( "max-width", config.each )
-                            , ( "max-height", config.each )
-                            ]
+                    ++ [ Html.Attributes.style "max-width" config.each
+                       , Html.Attributes.style "max-height" config.each
                        ]
+                    ++ followCursor drag.position
                 )
 
 
-followCursor : Mouse.Position -> Attribute msg
-followCursor { x, y } =
-    Html.Attributes.style
-        [ ( "position", "absolute" )
-        , ( "top", "calc(" ++ toString y ++ "px - 11em)" )
-        , ( "left", "calc(" ++ toString x ++ "px - 9em)" )
-        , ( "z-index", "9" )
-        , ( "pointer-events", "none" )
-        ]
+followCursor : ( Int, Int ) -> List (Attribute msg)
+followCursor ( x, y ) =
+    [ Html.Attributes.style "position" "absolute"
+    , Html.Attributes.style "top" <| "calc(" ++ String.fromInt y ++ "px - 11em)"
+    , Html.Attributes.style "left" <| "calc(" ++ String.fromInt x ++ "px - 9em)"
+    , Html.Attributes.style "z-index" "9"
+    , Html.Attributes.style "pointer-events" "none"
+    ]
 
 
 viewCell : Drag.State DraggableItem -> Position -> Chess.Data.Board.Square -> Html Msg
 viewCell drag position square =
     case square of
         Empty ->
-            Chess.View.Board.square position
+            Chess.View.Board.viewSquare position
                 square
                 [ onMouseEnter (SetHover position)
                 , onClick (SelectSquare position)
@@ -252,17 +253,18 @@ viewCell drag position square =
                 []
 
         Occupied player piece ->
-            Chess.View.Board.square position
+            Chess.View.Board.viewSquare position
                 square
                 (List.concat
                     [ onMouseEnter (SetHover position)
-                        :: Html.Attributes.style [ ( "cursor", "grab" ) ]
+                        :: onClick (SelectSquare position)
+                        :: Html.Attributes.style "cursor" "grab"
                         :: Drag.draggableAttributes dragConfig
                             (DraggableItem position player piece)
-                    , [ onClick (SelectSquare position) ]
+                    , animateDrag position drag
                     ]
                 )
-                (animateDrag position drag)
+                []
 
 
 animateDrag : Position -> Drag.State DraggableItem -> List (Attribute Msg)
@@ -294,7 +296,7 @@ findTeam currentGame =
             Black
 
         _ ->
-            Debug.crash "fix me"
+            Debug.todo "fix me"
 
 
 nextTeam : Player -> Player
