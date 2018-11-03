@@ -1,7 +1,8 @@
 module Api exposing (best)
 
+import Chess exposing (ValidatedFen, getRaw, validateFen)
 import Http
-import Json.Decode exposing (Decoder, field, string)
+import Json.Decode exposing (Decoder, andThen, field, string)
 import Json.Encode
 import Task exposing (Task)
 
@@ -10,18 +11,37 @@ import Task exposing (Task)
 -- ENGINE BACKEND
 
 
-fen : Decoder String
-fen =
+rawFen : Decoder String
+rawFen =
     field "board" string
 
 
-best : String -> String -> Task Http.Error String
-best baseEngineUrl state =
+validatedFen : Decoder ValidatedFen
+validatedFen =
+    rawFen |> andThen (fromResult << validateFen)
+
+
+fromResult : Result String a -> Decoder a
+fromResult result =
+    case result of
+        Ok successValue ->
+            Json.Decode.succeed successValue
+
+        Err errorMessage ->
+            Json.Decode.fail errorMessage
+
+
+best : String -> ValidatedFen -> Task Http.Error ValidatedFen
+best baseEngineUrl currentFen =
+    let
+        asdf =
+            Debug.log "current fen" currentFen
+    in
     Http.post
         (baseEngineUrl ++ "/best")
         (Http.jsonBody <|
             Json.Encode.object
-                [ ( "board", Json.Encode.string state ) ]
+                [ ( "board", Json.Encode.string (getRaw currentFen) ) ]
         )
-        fen
+        validatedFen
         |> Http.toTask

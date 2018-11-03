@@ -5,7 +5,7 @@ module Chess exposing
     , subscriptions
     , update
     , view
-    , getSquaresSelected
+    , ValidatedFen, blankState, blankValidatedFen, getBoard, getRaw, getSquaresSelected, getTeam, setTeam, validateFen
     )
 
 {-|
@@ -21,7 +21,7 @@ module Chess exposing
 
 import Animation
 import Browser.Dom exposing (getElement)
-import Chess.Data.Board exposing (Board, Square(..))
+import Chess.Data.Board exposing (Board, Square(..), blankBoard)
 import Chess.Data.Piece exposing (Piece(..))
 import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position)
@@ -58,31 +58,165 @@ type alias DraggableItem =
     }
 
 
-{-| -}
-fromFen : String -> Maybe State
-fromFen fen =
-    let
-        asdf =
-            Debug.log "fen" fen
-    in
-    case Debug.log "decoded" <| D.decodeValue Chess.Data.Board.boardDecoder (E.string fen) of
-        Err reason ->
-            Nothing
+type ValidatedFen
+    = ValidatedFen Board Player String
 
-        Ok board ->
-            Just <|
-                State
-                    { board = board
-                    , team = findTeam fen
-                    , hover = Nothing
-                    , drag =
-                        { subject = Nothing
-                        , position = ( 0, 0 )
-                        , original = Animation.style present
-                        , cursor = Animation.style gone
-                        }
-                    , squaresSelected = []
-                    }
+
+
+-- type Turn
+--     = FirstToAct
+--     | SecondToAct
+
+
+type IntermediateFen
+    = Raw String String String
+    | IBoard Board String String
+    | IBoardPlusTurn Board Player String
+
+
+{-|
+
+    This is the primary entry point for the app.
+
+    This is its type signature:
+
+    validateFen : String -> Result String ValidatedFen
+
+
+    It takes a fen string as input (fen stands for (Forsyth-Edwards Notation)[https://en.wikipedia.org/wiki/Forsyth–Edwards_Notation#Examples]. Fen
+    is the most succint way I've found to represent a full game of chess state).
+
+
+    This is the starting position for a chess game for instance: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
+
+
+    To get a ValidatedFen type you must first take the raw string and pipe it through this function.
+    Then define what happens if you get an error back from the function and then use the type as you intended.
+
+-}
+validateFen : String -> Result String ValidatedFen
+validateFen rawFen =
+    let
+        fenResult : String -> Result String IntermediateFen
+        fenResult superRaw =
+            case String.split " " superRaw of
+                [ a, b, c, d, e, f ] ->
+                    Ok <| Raw a b superRaw
+
+                _ ->
+                    Err <| rawFen ++ " doesn't look right. FEN needs to have 6 pieces of info"
+
+        validateBoard : IntermediateFen -> Result String IntermediateFen
+        validateBoard inter =
+            case inter of
+                Raw rawBoard b baseRaw ->
+                    case D.decodeValue Chess.Data.Board.boardDecoder3 (E.string rawBoard) of
+                        Ok board ->
+                            Ok <| IBoard board b baseRaw
+
+                        Err reason ->
+                            Err "Board validation failure."
+
+                _ ->
+                    Err "Called out of order"
+
+        validateTurn : IntermediateFen -> Result String IntermediateFen
+        validateTurn inter =
+            case inter of
+                IBoard board rawTurn baseRaw ->
+                    case parseTurn rawTurn of
+                        Ok turn ->
+                            Ok <| IBoardPlusTurn board turn baseRaw
+
+                        Err reason ->
+                            Err reason
+
+                _ ->
+                    Err "Called out of order"
+
+        validatedFen =
+            fenResult rawFen
+                |> Result.andThen validateBoard
+                |> Result.andThen validateTurn
+    in
+    case validatedFen of
+        Ok (IBoardPlusTurn board turn baseRaw) ->
+            Ok <| ValidatedFen board turn baseRaw
+
+        _ ->
+            Err "Called out of order maybe?"
+
+
+{-| -}
+fromFen : ValidatedFen -> State
+fromFen (ValidatedFen board turn _) =
+    State
+        { board = board
+        , team = turn
+        , hover = Nothing
+        , drag =
+            { subject = Nothing
+            , position = ( 0, 0 )
+            , original = Animation.style present
+            , cursor = Animation.style gone
+            }
+        , squaresSelected = []
+        }
+
+
+blankState : State
+blankState =
+    State
+        { board = blankBoard
+        , team = White
+        , hover = Nothing
+        , drag =
+            { subject = Nothing
+            , position = ( 0, 0 )
+            , original = Animation.style present
+            , cursor = Animation.style gone
+            }
+        , squaresSelected = []
+        }
+
+
+blankValidatedFen : ValidatedFen
+blankValidatedFen =
+    ValidatedFen blankBoard White "8/8/8/8/8/8/8/8 w - - 0 0"
+
+
+getBoard : ValidatedFen -> Board
+getBoard (ValidatedFen board _ _) =
+    board
+
+
+getTeam : ValidatedFen -> Player
+getTeam (ValidatedFen _ player _) =
+    player
+
+
+setTeam : Player -> ValidatedFen -> ValidatedFen
+setTeam updatedTeam (ValidatedFen board _ raw) =
+    ValidatedFen board updatedTeam raw
+
+
+getRaw : ValidatedFen -> String
+getRaw (ValidatedFen _ _ raw) =
+    raw
+
+
+{-| -}
+parseTurn : String -> Result String Player
+parseTurn turn =
+    case turn of
+        "w" ->
+            Ok White
+
+        "b" ->
+            Ok Black
+
+        _ ->
+            Err <| turn ++ " is not a valid entry. do 'w' for FirstToAct or 'b' for SecondToAct"
 
 
 {-| -}
@@ -105,7 +239,7 @@ type Msg
 
 type alias Config msg =
     { toMsg : Msg -> msg
-    , onFenChanged : String -> msg
+    , onFenChanged : ValidatedFen -> msg
     , isRecording : Bool
     }
 
@@ -120,7 +254,7 @@ update config msg (State state) =
                 |> Tuple.mapSecond (Cmd.map config.toMsg)
 
         FinalRelease from ->
-            case Debug.log "hover" state.hover of
+            case state.hover of
                 Nothing ->
                     ( State state, Cmd.none )
 
@@ -135,9 +269,12 @@ update config msg (State state) =
 
                             else
                                 state.team
+
+                        rawFen =
+                            Chess.Data.Board.toFen board updatedTeam
                     in
                     ( State { state | board = board, team = updatedTeam }
-                    , Task.succeed (Chess.Data.Board.toFen board updatedTeam)
+                    , Task.succeed (ValidatedFen board updatedTeam rawFen)
                         |> Task.perform config.onFenChanged
                     )
 
@@ -284,19 +421,6 @@ either fromError fromOk result =
 
         Ok a ->
             fromOk a
-
-
-findTeam : String -> Player
-findTeam currentGame =
-    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
-        Just "w" ->
-            White
-
-        Just "b" ->
-            Black
-
-        _ ->
-            Debug.todo "fix me"
 
 
 nextTeam : Player -> Player

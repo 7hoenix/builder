@@ -3,7 +3,7 @@ module Chess.Data.Board exposing
     , Square(..)
     , boardDecoder
     , toFen
-    , fromFen
+    , blankBoard, boardDecoder2, boardDecoder3, fromFen
     )
 
 {-|
@@ -97,6 +97,17 @@ parseFenHelp entireBoard =
             fail "not a FEN-encoded board"
 
 
+boardDecoder3 : Decoder Board
+boardDecoder3 =
+    andThen boardDecoder2 string
+
+
+boardDecoder2 : String -> Decoder Board
+boardDecoder2 entireBoard =
+    String.split "/" entireBoard
+        |> List.foldr (parseFenRow >> map2 (::)) (succeed [])
+
+
 parseFenRow : String -> Decoder (List Square)
 parseFenRow row =
     String.toList row
@@ -148,6 +159,16 @@ allPieces =
 parseDigit : Char -> Int
 parseDigit c =
     Char.toCode c - 48
+
+
+blankBoard : Board
+blankBoard =
+    List.repeat 8 blankRow
+
+
+blankRow : List Square
+blankRow =
+    List.repeat 8 Empty
 
 
 
