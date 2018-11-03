@@ -1367,7 +1367,11 @@ isRecording gameState =
 
 fastForward : Int -> Random.Seed -> Random.Seed
 fastForward numberOfStepsToApply seed =
-    seed
+    if numberOfStepsToApply == 0 then
+        seed
+
+    else
+        fastForward (numberOfStepsToApply - 1) <| Tuple.second (Random.step (Random.int 1 2) seed)
 
 
 
