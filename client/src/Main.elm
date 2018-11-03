@@ -1032,15 +1032,15 @@ viewSidebar model =
 viewMode : Model -> Html Msg
 viewMode model =
     let
-        isChecked : SupportedMode -> Bool
-        isChecked =
+        isSelected : SupportedMode -> Bool
+        isSelected =
             \x -> model.mode == x
     in
     case model.initialGameState of
         Nothing ->
             div [ H.class "box", H.class "control" ]
                 [ h3 [ H.class "subtitle is-5" ] [ text "Mode" ]
-                , radio (SelectMode Basic) " Basic" "mode" (isChecked Basic)
+                , radio (SelectMode Basic) " Basic" "mode" (isSelected Basic)
                 ]
 
         Just _ ->
@@ -1050,8 +1050,8 @@ viewMode model =
 viewFeatureSet : Model -> Html Msg
 viewFeatureSet model =
     let
-        isChecked : FeatureSet -> Bool
-        isChecked =
+        isSelected : FeatureSet -> Bool
+        isSelected =
             \x -> model.featureSet == x
     in
     case model.initialGameState of
@@ -1061,26 +1061,26 @@ viewFeatureSet model =
         Just _ ->
             div [ H.class "box", H.class "control" ]
                 [ h3 [ H.class "subtitle is-5" ] [ text "Feature Set" ]
-                , radio (SelectFeatureSet Full) " Full" "featureSet" (isChecked Full)
-                , radio (SelectFeatureSet NoMoves) " NoMoves" "featureSet" (isChecked NoMoves)
-                , radio (SelectFeatureSet PlayerMoves) " PlayerMoves" "featureSet" (isChecked PlayerMoves)
-                , radio (SelectFeatureSet OpponentMoves) " OpponentMoves" "featureSet" (isChecked OpponentMoves)
+                , radio (SelectFeatureSet Full) " Full" "featureSet" (isSelected Full)
+                , radio (SelectFeatureSet NoMoves) " NoMoves" "featureSet" (isSelected NoMoves)
+                , radio (SelectFeatureSet PlayerMoves) " PlayerMoves" "featureSet" (isSelected PlayerMoves)
+                , radio (SelectFeatureSet OpponentMoves) " OpponentMoves" "featureSet" (isSelected OpponentMoves)
                 ]
 
 
 viewTeam : Model -> Html Msg
 viewTeam model =
     let
-        isChecked : Player -> Bool
-        isChecked team =
+        isSelected : Player -> Bool
+        isSelected team =
             findTeam model.currentGameState == team
     in
     case model.initialGameState of
         Nothing ->
             div [ H.class "box", H.class "control" ]
                 [ h3 [ H.class "subtitle is-5" ] [ text "Turn" ]
-                , radio (SelectTeam White) " White" "team" (isChecked White)
-                , radio (SelectTeam Black) " Black" "team" (isChecked Black)
+                , radio (SelectTeam White) " White" "team" (isSelected White)
+                , radio (SelectTeam Black) " Black" "team" (isSelected Black)
                 ]
 
         Just _ ->
@@ -1088,9 +1088,9 @@ viewTeam model =
 
 
 radio : msg -> String -> String -> Bool -> Html msg
-radio msg buttonText name isChecked =
+radio msg buttonText name isSelected =
     label [ H.class "radio" ]
-        [ input [ type_ "radio", H.name name, onClick msg, H.checked isChecked ] []
+        [ input [ type_ "radio", H.name name, onClick msg, H.selected isSelected ] []
         , text buttonText
         ]
 
