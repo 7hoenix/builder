@@ -4,7 +4,7 @@ import Api
 import Browser
 import BuilderJs
 import Char
-import Chess exposing (Msg, State, fromFen, getSquaresSelected, subscriptions, update, view)
+import Chess exposing (Msg, State, ValidatedFen, blankState, blankValidatedFen, fromValidatedFen, getBoard, getRaw, getSquaresSelected, getTeam, setTeam, subscriptions, update, view)
 import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
@@ -80,9 +80,9 @@ type alias Model =
     , baseEngineUrl : String
     , mode : SupportedMode
     , store : Store
-    , currentGameState : String
+    , currentGameState : ValidatedFen
     , featureSet : FeatureSet
-    , initialGameState : Maybe String
+    , initialGameState : Maybe ValidatedFen
     , initialSeed : Random.Seed
     , placements : List Placement
     , pointsAllowed : Int
@@ -110,23 +110,15 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
         initialPlacements =
             generate [] pointsAllowed initialSeed
 
-        blankGameFen =
-            "8/8/8/8/8/8/8/8 w - - 0 0"
-
-        initialChessState =
-            case Chess.fromFen blankGameFen of
-                Nothing ->
-                    Debug.todo "FEN PARSER IS BROKEN, PANIC"
-
-                Just state ->
-                    state
+        blankValidatedFen =
+            Chess.blankValidatedFen
     in
     ( { apiEndpoint = apiEndpoint
       , featureSet = Full
       , baseEngineUrl = baseEngineUrl
       , mode = Basic
       , store = Store Dict.empty
-      , currentGameState = blankGameFen
+      , currentGameState = blankValidatedFen
       , initialGameState = Nothing
       , initialSeed = initialSeed
       , placements = initialPlacements
@@ -134,7 +126,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
       , submitting = False
       , startingTeam = Black
       , alert = Nothing
-      , chessModel = initialChessState
+      , chessModel = Chess.fromValidatedFen blankValidatedFen
       }
     , sendPlacements initialPlacements
     )
@@ -159,7 +151,7 @@ type Msg
     | Error String
     | FindBestMove
     | GetSeed
-    | HandleGameUpdate String
+    | HandleGameUpdate ValidatedFen
     | HandleSliderChange Int
     | PostLessonCompleted (Result Http.Error String)
     | Record
@@ -274,13 +266,13 @@ postLessonCmd ({ initialGameState, store, apiEndpoint } as model) =
         Nothing ->
             ( { model | alert = Just "NO GAME STATE" }, Cmd.none )
 
-        Just gameState ->
+        Just validatedFen ->
             let
                 body =
                     jsonBody
                         (E.object
                             [ ( "title", E.string "The net" )
-                            , ( "state", E.string gameState )
+                            , ( "state", E.string (getRaw validatedFen) )
                             , ( "store", encodeStore store )
                             ]
                         )
@@ -341,29 +333,10 @@ postLessonCompleted model result =
 startRecording : Model -> ( Model, Cmd Msg )
 startRecording model =
     let
-        findTeamIdentifierFromPlayer =
-            \player ->
-                case player of
-                    White ->
-                        "w"
-
-                    Black ->
-                        "b"
-
-        updatedCurrentGameState =
-            String.join " "
-                (List.indexedMap
-                    (\i particle ->
-                        if i == 1 then
-                            findTeamIdentifierFromPlayer model.startingTeam
-
-                        else
-                            particle
-                    )
-                    (String.words model.currentGameState)
-                )
+        initialGameState =
+            Chess.setTeam model.startingTeam model.currentGameState
     in
-    ( handleGameUpdate { model | initialGameState = Just updatedCurrentGameState } updatedCurrentGameState, Cmd.none )
+    ( handleGameUpdate { model | initialGameState = Just initialGameState } initialGameState, Cmd.none )
 
 
 regenerateSeed : Time.Posix -> Model -> ( Model, Cmd Msg )
@@ -445,17 +418,12 @@ findBestMove model =
 ---- GAME UPDATE ----
 
 
-handleGameUpdate : Model -> String -> Model
-handleGameUpdate model newFen =
-    case Chess.fromFen newFen of
-        Nothing ->
-            { model | alert = Just "BAD FEN" }
-
-        Just s ->
-            handleGameUpdateHelp model newFen s
+handleGameUpdate : Model -> ValidatedFen -> Model
+handleGameUpdate model validatedFen =
+    handleGameUpdateHelp model validatedFen <| Chess.fromValidatedFen validatedFen
 
 
-handleGameUpdateHelp : Model -> String -> Chess.State -> Model
+handleGameUpdateHelp : Model -> ValidatedFen -> Chess.State -> Model
 handleGameUpdateHelp model newFen updatedState =
     let
         blankFrame =
@@ -596,7 +564,7 @@ squareEncoder square =
                     "h"
 
                 _ ->
-                    Debug.todo "not valid x parameter :("
+                    "not valid x parameter :("
     in
     E.string (row ++ String.fromInt square.y)
 
@@ -1073,7 +1041,7 @@ viewTeam model =
     let
         isSelected : Player -> Bool
         isSelected team =
-            findTeam model.currentGameState == team
+            Chess.getTeam model.currentGameState == team
     in
     case model.initialGameState of
         Nothing ->
@@ -1093,19 +1061,6 @@ radio msg buttonText name isSelected =
         [ input [ type_ "radio", H.name name, onClick msg, H.selected isSelected ] []
         , text buttonText
         ]
-
-
-findTeam : String -> Player
-findTeam currentGame =
-    case List.head <| List.drop 1 <| List.take 2 <| String.words currentGame of
-        Just "w" ->
-            White
-
-        Just "b" ->
-            Black
-
-        _ ->
-            Debug.todo "fix me"
 
 
 parseInt : String -> D.Decoder Msg
@@ -1146,7 +1101,7 @@ viewLesson model =
         Just frame ->
             div [ H.class "box", H.class "control" ]
                 [ div [] [ h5 [ H.class "title is-6" ] [ text "Current Lesson" ] ]
-                , div [] [ text <| "Turn: " ++ (teamToString <| findTeam model.currentGameState) ]
+                , div [] [ text <| "Turn: " ++ (teamToString <| Chess.getTeam model.currentGameState) ]
                 , div []
                     [ textarea
                         [ H.class "textarea"
@@ -1161,12 +1116,7 @@ viewLesson model =
                 ]
 
 
-getFrameHints : Store -> String -> Maybe Hints
-getFrameHints store gameState =
-    Maybe.map (\frame -> frame.squares) <| getFrame store gameState
-
-
-getFrame : Store -> String -> Maybe Frame
+getFrame : Store -> ValidatedFen -> Maybe Frame
 getFrame (Store store) gameState =
     Dict.get (findStorageKey gameState) store
 
@@ -1275,9 +1225,9 @@ viewSquareHints selectedSquares (Hints hints) =
                 )
 
 
-findStorageKey : String -> String
-findStorageKey fullFenState =
-    String.join " " <| List.take 2 <| String.words fullFenState
+findStorageKey : ValidatedFen -> String
+findStorageKey validatedFen =
+    String.join " " <| List.take 2 <| String.words (Chess.getRaw validatedFen)
 
 
 toCommand : Position -> String
@@ -1355,7 +1305,7 @@ either fromError fromOk result =
             fromOk a
 
 
-isRecording : Maybe String -> Bool
+isRecording : Maybe ValidatedFen -> Bool
 isRecording gameState =
     case gameState of
         Nothing ->
@@ -1367,7 +1317,11 @@ isRecording gameState =
 
 fastForward : Int -> Random.Seed -> Random.Seed
 fastForward numberOfStepsToApply seed =
-    seed
+    if numberOfStepsToApply == 0 then
+        seed
+
+    else
+        fastForward (numberOfStepsToApply - 1) <| Tuple.second (Random.step (Random.int 1 2) seed)
 
 
 
@@ -1387,10 +1341,18 @@ decodeFen value =
     let
         result =
             D.decodeValue (D.field "position" D.string) value
+
+        validatedFen =
+            case result of
+                Ok rawFen ->
+                    Chess.validateFen rawFen
+
+                Err err ->
+                    Err "Validating fen failed from library"
     in
-    case result of
+    case validatedFen of
         Ok fen ->
             HandleGameUpdate fen
 
         Err error ->
-            Error ("fen decoding failed: " ++ Debug.toString error)
+            Error ("fen decoding failed: " ++ error)

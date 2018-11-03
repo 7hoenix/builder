@@ -3,7 +3,7 @@ module Chess.Data.Board exposing
     , Square(..)
     , boardDecoder
     , toFen
-    , fromFen
+    , blankBoard
     )
 
 {-|
@@ -47,36 +47,10 @@ type Column
     = Column (List Square)
 
 
-
--- {-| This is how to query a column (usefull for view functions like this one)
--- -- viewSelectedColumn : Square -> List Column -> Column
--- -- viewSelectedColumn square columns =
--- -- List.filter
--- -}
--- fenToColumns : ValidatedFen -> List Column
-
-
 {-| -}
 type Square
     = Empty
     | Occupied Player.Player Piece
-
-
-{-| -}
-boardDecoder : Decoder Board
-boardDecoder =
-    andThen parseFen string
-
-
-{-| -}
-fromFen : String -> Maybe Board
-fromFen fen =
-    case D.decodeValue boardDecoder (E.string fen) of
-        Err reason ->
-            Nothing
-
-        Ok board ->
-            Just board
 
 
 parseFen : String -> Decoder Board
@@ -95,6 +69,17 @@ parseFenHelp entireBoard =
 
         Nothing ->
             fail "not a FEN-encoded board"
+
+
+boardDecoder : Decoder Board
+boardDecoder =
+    andThen boardDecoderHelp string
+
+
+boardDecoderHelp : String -> Decoder Board
+boardDecoderHelp entireBoard =
+    String.split "/" entireBoard
+        |> List.foldr (parseFenRow >> map2 (::)) (succeed [])
 
 
 parseFenRow : String -> Decoder (List Square)
@@ -148,6 +133,16 @@ allPieces =
 parseDigit : Char -> Int
 parseDigit c =
     Char.toCode c - 48
+
+
+blankBoard : Board
+blankBoard =
+    List.repeat 8 blankRow
+
+
+blankRow : List Square
+blankRow =
+    List.repeat 8 Empty
 
 
 
