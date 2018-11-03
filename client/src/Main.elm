@@ -4,7 +4,7 @@ import Api
 import Browser
 import BuilderJs
 import Char
-import Chess exposing (Msg, State, ValidatedFen, blankState, blankValidatedFen, fromFen, getBoard, getRaw, getSquaresSelected, getTeam, setTeam, subscriptions, update, view)
+import Chess exposing (Msg, State, ValidatedFen, blankState, blankValidatedFen, fromValidatedFen, getBoard, getRaw, getSquaresSelected, getTeam, setTeam, subscriptions, update, view)
 import Chess.Data.Player exposing (Player(..))
 import Chess.Data.Position exposing (Position, toRowColumn)
 import Chess.View.Board
@@ -47,37 +47,8 @@ type Piece
     | Pawn
 
 
-type IntBetweenOneAndEight
-    = One
-    | Two
-    | Three
-    | Four
-    | Five
-    | Six
-    | Seven
-    | Eight
-
-
 type alias SquareLocation =
     { x : Int, y : Int }
-
-
-
--- squareLocation : Int -> Int -> Result String SquareLocation
--- squareLocation x y =
---     let
---         resultInBetween n =
---             case ( n < 1, n > 8 ) of
---                 ( False, False ) ->
---                     Ok <| IntBetweenOneAndEight n
---                 _ ->
---                     Err "Out of bounds"
---         resultX =
---             resultInBetween x
---         resultY =
---             resultInBetween y
---     in
---     Result.map2 SquareLocation resultX resultY
 
 
 type alias Placement =
@@ -155,7 +126,7 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
       , submitting = False
       , startingTeam = Black
       , alert = Nothing
-      , chessModel = Chess.fromFen blankValidatedFen
+      , chessModel = Chess.fromValidatedFen blankValidatedFen
       }
     , sendPlacements initialPlacements
     )
@@ -364,25 +335,6 @@ startRecording model =
     let
         initialGameState =
             Chess.setTeam model.startingTeam model.currentGameState
-
-        -- findTeamIdentifierFromPlayer =
-        --     \player ->
-        --         case player of
-        --             White ->
-        --                 "w"
-        --             Black ->
-        --                 "b"
-        -- updatedCurrentGameState =
-        --     String.join " "
-        --         (List.indexedMap
-        --             (\i particle ->
-        --                 if i == 1 then
-        --                     findTeamIdentifierFromPlayer model.startingTeam
-        --                 else
-        --                     particle
-        --             )
-        --             (String.words model.currentGameState)
-        --         )
     in
     ( handleGameUpdate { model | initialGameState = Just initialGameState } initialGameState, Cmd.none )
 
@@ -468,15 +420,7 @@ findBestMove model =
 
 handleGameUpdate : Model -> ValidatedFen -> Model
 handleGameUpdate model validatedFen =
-    -- case Chess.validateFen newFen of
-    --     Err msg ->
-    --         { model | alert = Just msg }
-    --     Ok validatedFen ->
-    handleGameUpdateHelp model validatedFen <| Chess.fromFen validatedFen
-
-
-
--- handleGameUpdateHelp model newFen <| Chess.fromFen newFen
+    handleGameUpdateHelp model validatedFen <| Chess.fromValidatedFen validatedFen
 
 
 handleGameUpdateHelp : Model -> ValidatedFen -> Chess.State -> Model
@@ -1170,12 +1114,6 @@ viewLesson model =
                 , viewSquareHints (getSquaresSelected model.chessModel) frame.squares
                 , div [] [ button [ onClick FindBestMove, H.class "button is-small is-success" ] [ text "Find Best Move" ] ]
                 ]
-
-
-
--- getFrameHints : Store -> String -> Maybe Hints
--- getFrameHints store gameState =
---     Maybe.map (\frame -> frame.squares) <| getFrame store gameState
 
 
 getFrame : Store -> ValidatedFen -> Maybe Frame

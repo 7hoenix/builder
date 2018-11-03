@@ -1,7 +1,7 @@
 module Chess exposing
     ( Msg
     , State
-    , fromFen
+    , fromValidatedFen
     , subscriptions
     , update
     , view
@@ -12,7 +12,7 @@ module Chess exposing
 
 @docs Msg
 @docs State
-@docs fromFen
+@docs fromValidatedFen
 @docs subscriptions
 @docs update
 @docs view
@@ -62,12 +62,6 @@ type ValidatedFen
     = ValidatedFen Board Player String
 
 
-
--- type Turn
---     = FirstToAct
---     | SecondToAct
-
-
 type IntermediateFen
     = Raw String String String
     | IBoard Board String String
@@ -110,7 +104,7 @@ validateFen rawFen =
         validateBoard inter =
             case inter of
                 Raw rawBoard b baseRaw ->
-                    case D.decodeValue Chess.Data.Board.boardDecoder3 (E.string rawBoard) of
+                    case D.decodeValue Chess.Data.Board.boardDecoder (E.string rawBoard) of
                         Ok board ->
                             Ok <| IBoard board b baseRaw
 
@@ -148,8 +142,8 @@ validateFen rawFen =
 
 
 {-| -}
-fromFen : ValidatedFen -> State
-fromFen (ValidatedFen board turn _) =
+fromValidatedFen : ValidatedFen -> State
+fromValidatedFen (ValidatedFen board turn _) =
     State
         { board = board
         , team = turn
