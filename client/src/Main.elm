@@ -47,8 +47,37 @@ type Piece
     | Pawn
 
 
+type IntBetweenOneAndEight
+    = One
+    | Two
+    | Three
+    | Four
+    | Five
+    | Six
+    | Seven
+    | Eight
+
+
 type alias SquareLocation =
     { x : Int, y : Int }
+
+
+
+-- squareLocation : Int -> Int -> Result String SquareLocation
+-- squareLocation x y =
+--     let
+--         resultInBetween n =
+--             case ( n < 1, n > 8 ) of
+--                 ( False, False ) ->
+--                     Ok <| IntBetweenOneAndEight n
+--                 _ ->
+--                     Err "Out of bounds"
+--         resultX =
+--             resultInBetween x
+--         resultY =
+--             resultInBetween y
+--     in
+--     Result.map2 SquareLocation resultX resultY
 
 
 type alias Placement =
@@ -110,20 +139,8 @@ blankState initialSeed pointsAllowed apiEndpoint baseEngineUrl =
         initialPlacements =
             generate [] pointsAllowed initialSeed
 
-        blankGameFen =
-            "8/8/8/8/8/8/8/8 w - - 0 0"
-
-        initialChessState =
-            Chess.blankState
-
         blankValidatedFen =
             Chess.blankValidatedFen
-
-        -- case Chess.fromFen blankGameFen of
-        --     Nothing ->
-        --         Debug.todo "FEN PARSER IS BROKEN, PANIC"
-        --     Just state ->
-        --         state
     in
     ( { apiEndpoint = apiEndpoint
       , featureSet = Full
@@ -603,7 +620,7 @@ squareEncoder square =
                     "h"
 
                 _ ->
-                    Debug.todo "not valid x parameter :("
+                    "not valid x parameter :("
     in
     E.string (row ++ String.fromInt square.y)
 
@@ -1400,4 +1417,4 @@ decodeFen value =
             HandleGameUpdate fen
 
         Err error ->
-            Error ("fen decoding failed: " ++ Debug.toString error)
+            Error ("fen decoding failed: " ++ error)

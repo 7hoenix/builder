@@ -33,10 +33,6 @@ fromResult result =
 
 best : String -> ValidatedFen -> Task Http.Error ValidatedFen
 best baseEngineUrl currentFen =
-    let
-        asdf =
-            Debug.log "current fen" currentFen
-    in
     Http.post
         (baseEngineUrl ++ "/best")
         (Http.jsonBody <|
